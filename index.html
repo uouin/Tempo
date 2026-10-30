@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="RvtkJdE0DjfBYfiJQeGH5s">
+<head data-page-node-id="ymPWNk6Wvj9Kw0Zo2aTLf1">
+<meta charset="UTF-8" data-page-node-id="rpBhSfAaFGwIYqc4FpoQCU">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" data-page-node-id="UCx4PCsiIuA9Q6bweMVRDU">
+<meta name="apple-mobile-web-app-capable" content="yes" data-page-node-id="yWcDM7hFKUYEbdta1KNPzU">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" data-page-node-id="BqaHw37auv0dnEG47RQriW">
+<meta name="apple-mobile-web-app-title" content="时钟" data-page-node-id="zOeYKgfsTDXVilCKFNno90">
+<title>翻页时钟</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+  body {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /*
+    兼容性策略（关键）：
+    - CSS 里只用百分比和最基础的定位，不用 calc / CSS 变量 / vmin / flex gap
+    - 卡片宽度、高度、字号、圆角、间距全部由 JS 按屏幕像素计算后内联写入
+    - 数字居中：span 高度是窗口的 200%（= 整卡），flex 居中；
+      下窗口的 span 用 top:-100%（百分比，相对窗口高度=整卡高）上移
+  */
+  .clock {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+    -webkit-align-items: flex-end;   /* 秒卡与时/分卡底对齐 */
+    align-items: flex-end;
+  }
+  .group {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+    -webkit-align-items: center;
+    align-items: center;
+  }
+
+  .card {
+    position: relative;
+    /* JS 会内联覆盖 width/height/font-size，这里给一个首帧兜底值 */
+    width: 150px;
+    height: 210px;
+    font-size: 132px;
+    font-weight: 700;
+    color: #fff;
+    -webkit-perspective: 600px;
+    perspective: 600px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    -webkit-flex: none;
+    flex: none;
+  }
+
+  /* 静态上下两半（裁剪窗口） */
+  .half {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    overflow: hidden;
+    background: -webkit-linear-gradient(top, #303036 0%, #1e1e22 100%);
+    background: linear-gradient(180deg, #303036 0%, #1e1e22 100%);
+    z-index: 1;
+  }
+  .half.upper {
+    top: 0;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .half.lower {
+    bottom: 0;
+    background: -webkit-linear-gradient(top, #232327 0%, #1a1a1e 100%);
+    background: linear-gradient(180deg, #232327 0%, #1a1a1e 100%);
+    box-shadow: inset 0 1px 0 rgba(0,0,0,0.9);
+  }
+
+  /* 数字排版：span 占满整卡高度，flex 精确居中；百分比定位，所有浏览器一致 */
+  .half span, .flap span {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 200%;          /* 2 × 窗口高 = 整卡高 */
+    top: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .half.upper span, .flap.front span { top: 0; }     /* 显示字形上半 */
+  .half.lower span, .flap.back span  { top: -100%; } /* 上移一整卡，显示字形下半 */
+
+  /* 翻页动片 */
+  .flap {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    overflow: hidden;
+    background: -webkit-linear-gradient(top, #303036 0%, #1e1e22 100%);
+    background: linear-gradient(180deg, #303036 0%, #1e1e22 100%);
+    display: none;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  .flap.front {
+    top: 0;
+    z-index: 3;
+    -webkit-transform-origin: 50% 100%;
+    transform-origin: 50% 100%;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.9);
+  }
+  .flap.back {
+    bottom: 0;
+    z-index: 2;
+    background: -webkit-linear-gradient(top, #232327 0%, #1a1a1e 100%);
+    background: linear-gradient(180deg, #232327 0%, #1a1a1e 100%);
+    box-shadow: inset 0 1px 0 rgba(0,0,0,0.9);
+  }
+
+  /*
+    翻页动画（关键兼容性决策）：
+    不用 3D rotateX（iPadOS Safari 对 overflow:hidden + 3D 动画的渲染有怪癖，
+    下半片会异常）。改用 2D scaleY 压缩翻转：
+    - 前片（上半、旧值）：scaleY 1 → 0，向折缝压合
+    - 后片（下半、新值）：scaleY 0 → 1，从折缝展开
+    所有浏览器渲染一致。
+  */
+  .card.go .flap { display: block; }
+  .card.go .flap.front {
+    -webkit-transform-origin: 50% 100%;
+    transform-origin: 50% 100%;
+    -webkit-animation: flipTop 0.22s ease-in both;
+    animation: flipTop 0.22s ease-in both;
+  }
+  .card.go .flap.back {
+    -webkit-transform-origin: 50% 0%;
+    transform-origin: 50% 0%;
+    -webkit-animation: flipBottom 0.22s 0.22s ease-out both;
+    animation: flipBottom 0.22s 0.22s ease-out both;
+  }
+  @-webkit-keyframes flipTop {
+    from { -webkit-transform: scaleY(1); }
+    to   { -webkit-transform: scaleY(0); }
+  }
+  @keyframes flipTop {
+    from { transform: scaleY(1); }
+    to   { transform: scaleY(0); }
+  }
+  @-webkit-keyframes flipBottom {
+    from { -webkit-transform: scaleY(0); }
+    to   { -webkit-transform: scaleY(1); }
+  }
+  @keyframes flipBottom {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+  }
+
+  /* 左上角模式按钮条（刻意做得很淡，不干扰时钟本体；激活项略亮并显示"时钟"） */
+  #modeBar {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+  }
+  .mode-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    background: none;
+    border: none;
+    color: #fff;
+    opacity: 0.22;
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 12px 14px;
+    margin: 0;
+    margin-right: 4px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mode-btn:last-child { margin-right: 0; }
+
+  /* 番茄钟 / 倒计时视图：状态标签 + 翻页卡 + 操作提示，整体居中 */
+  #pomoView,
+  #cdView {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+  }
+  #pomoState,
+  #cdState {
+    color: #fff;
+    opacity: 0.4;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    margin-bottom: 26px;
+  }
+  #pomoHint,
+  #cdHint {
+    color: #fff;
+    opacity: 0.18;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    margin-top: 26px;
+  }
+
+  /* AM / PM 角标（位置由 JS 按像素写入；padding+负 margin 扩大点击热区，视觉位置不变） */
+  .meridiem {
+    position: absolute;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.05em;
+    z-index: 1;
+    cursor: pointer;
+    padding: 14px;
+    margin: -14px;
+  }
+</style>
+</head>
+<body data-page-node-id="PHVwJtksViCUClyicGFO7w">
+  <div id="modeBar">
+    <button class="mode-btn" id="pomoBtn" type="button">番茄钟</button>
+    <button class="mode-btn" id="h1Btn" type="button">一小时</button>
+    <button class="mode-btn" id="h2Btn" type="button">两小时</button>
+  </div>
+
+  <div class="clock" id="clockView" data-page-node-id="ppMXjZKmxePg6Dds4MVfBY">
+    <div class="card" id="hourCard" data-page-node-id="BbSS3EiXBCglPh2iT0klHg">
+      <div class="half upper" data-page-node-id="OP5AT7p1HtP5jDXS0lq28X"><span data-page-node-id="C9sYIgy3UQ7RwzSHEp5AGV">12</span></div>
+      <div class="half lower" data-page-node-id="cUZ9cVGLDqhgfUEFeWw4yp"><span data-page-node-id="FZg3TGfcS0IchMESkLuAN8">12</span></div>
+      <div class="flap front" data-page-node-id="OyYJa9xQA6KekR56nhmkim"><span data-page-node-id="hVPaKAULABnOkKK0SyNcKQ"></span></div>
+      <div class="flap back" data-page-node-id="ne6fK8oyR6dcN7LCBNuD0u"><span data-page-node-id="wtALhlYnNph4jiiwJxd2KJ"></span></div>
+      <div class="meridiem" id="meridiem" data-page-node-id="KDbyWzrX6XHF8PR4NE05xd">PM</div>
+    </div>
+    <div class="card" id="minuteCard" data-page-node-id="Vkkehgh7PKjsxKf8p5SW5Y">
+      <div class="half upper" data-page-node-id="abtOarFN5ciPUq0qLLF3i1"><span data-page-node-id="Os5aBPBOfsjOwde7LOno5v">43</span></div>
+      <div class="half lower" data-page-node-id="zR7V88KDirWW3E0EIrjDNr"><span data-page-node-id="rLNWkp4e2AF2hCVX9AZ2Aw">43</span></div>
+      <div class="flap front" data-page-node-id="9lWSOGkRDMl31oSHZU4HJs"><span data-page-node-id="cnkIF6QAmTuD0ck80kugQB"></span></div>
+      <div class="flap back" data-page-node-id="ygycEAsEV4Azx94OSGi4GX"><span data-page-node-id="nQDMGUBatZQSNszqFXRkI6"></span></div>
+    </div>
+    <div class="card" id="secondCard" data-page-node-id="2PxWLW3hzF3w4DDX9Uj8q6">
+      <div class="half upper" data-page-node-id="eyf1ZkMkfkCCAXEGFdb1jC"><span data-page-node-id="HuNvGBFyq5v2DIMg5sw51Y">08</span></div>
+      <div class="half lower" data-page-node-id="6RuJ24vPZBFoOiW9S1WdHZ"><span data-page-node-id="8AuGz0ECY6TbFAFy4zHeke">08</span></div>
+      <div class="flap front" data-page-node-id="ZbqlB9Ir1GTWidfUkw5Ez9"><span data-page-node-id="QOoryGWaa0zpPeRoICwYVg"></span></div>
+      <div class="flap back" data-page-node-id="5VoR5uJbraC9ULfJwjfH0a"><span data-page-node-id="uLg92pGzx3GugU9sekHD9R"></span></div>
+    </div>
+  </div>
+
+  <div id="pomoView" style="display:none">
+    <div id="pomoState">专注</div>
+    <div class="clock" id="pomoCards">
+      <div class="card" id="pMin">
+        <div class="half upper"><span>25</span></div>
+        <div class="half lower"><span>25</span></div>
+        <div class="flap front"><span></span></div>
+        <div class="flap back"><span></span></div>
+      </div>
+      <div class="card" id="pSec">
+        <div class="half upper"><span>00</span></div>
+        <div class="half lower"><span>00</span></div>
+        <div class="flap front"><span></span></div>
+        <div class="flap back"><span></span></div>
+      </div>
+    </div>
+    <div id="pomoHint">轻点开始 / 暂停 · 双击重置</div>
+  </div>
+
+  <div id="cdView" style="display:none">
+    <div id="cdState">倒计时</div>
+    <div class="clock" id="cdCards">
+      <div class="card" id="cH">
+        <div class="half upper"><span>01</span></div>
+        <div class="half lower"><span>01</span></div>
+        <div class="flap front"><span></span></div>
+        <div class="flap back"><span></span></div>
+      </div>
+      <div class="card" id="cM">
+        <div class="half upper"><span>00</span></div>
+        <div class="half lower"><span>00</span></div>
+        <div class="flap front"><span></span></div>
+        <div class="flap back"><span></span></div>
+      </div>
+      <div class="card" id="cS">
+        <div class="half upper"><span>00</span></div>
+        <div class="half lower"><span>00</span></div>
+        <div class="flap front"><span></span></div>
+        <div class="flap back"><span></span></div>
+      </div>
+    </div>
+    <div id="cdHint">轻点开始 / 暂停 · 双击重置</div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var hourCard = document.getElementById('hourCard');
+  var minuteCard = document.getElementById('minuteCard');
+  var secondCard = document.getElementById('secondCard');
+  var meridiem = document.getElementById('meridiem');
+
+  /* 番茄钟视图元素 */
+  var clockView = document.getElementById('clockView');
+  var pomoView = document.getElementById('pomoView');
+  var pomoCards = document.getElementById('pomoCards');
+  var pMin = document.getElementById('pMin');
+  var pSec = document.getElementById('pSec');
+  var pomoState = document.getElementById('pomoState');
+
+  /* 倒计时视图元素 + 左上角按钮条 */
+  var cdView = document.getElementById('cdView');
+  var cdCards = document.getElementById('cdCards');
+  var cH = document.getElementById('cH');
+  var cM = document.getElementById('cM');
+  var cS = document.getElementById('cS');
+  var pomoBtn = document.getElementById('pomoBtn');
+  var h1Btn = document.getElementById('h1Btn');
+  var h2Btn = document.getElementById('h2Btn');
+
+  /* ---------- 布局：JS 按屏幕像素计算，写入内联样式（不依赖 calc/变量/vmin） ---------- */
+  function applyCard(card, w, h, fs) {
+    var r = (w * 0.075) + 'px';
+    var s = card.style;
+    s.width = w + 'px';
+    s.height = h + 'px';
+    s.fontSize = fs + 'px';
+    s.webkitPerspective = (w * 4) + 'px';
+    s.perspective = (w * 4) + 'px';
+    var up = card.querySelector('.upper');
+    var lo = card.querySelector('.lower');
+    var fr = card.querySelector('.flap.front');
+    var ba = card.querySelector('.flap.back');
+    up.style.borderRadius = r + ' ' + r + ' 0 0';
+    lo.style.borderRadius = '0 0 ' + r + ' ' + r;
+    fr.style.borderRadius = r + ' ' + r + ' 0 0';
+    ba.style.borderRadius = '0 0 ' + r + ' ' + r;
+    var md = card.querySelector('.meridiem');
+    if (md) {
+      md.style.fontSize = (fs * 0.15) + 'px';
+      md.style.left = (w * 0.05) + 'px';
+      md.style.bottom = (h * 0.10) + 'px';
+    }
+  }
+
+  function layout() {
+    var w = document.documentElement.clientWidth;
+    var h = document.documentElement.clientHeight;
+    /*
+      三卡布局：时/分/秒各一张卡（两位数字同卡）
+      时/分卡：宽 = 1.2 倍基准（增宽 20%），高 = 1.4b（与第一版一致）
+      秒卡：宽度不增宽（= b），高度 = 分钟卡的一半（0.7b），三者底对齐
+    */
+    var b = Math.min(h * 0.30, w * 0.24);
+    var bigW = b * 1.2, bigH = b * 1.4;
+    var secW = b, secH = bigH * 0.5;
+    var gap = b * 0.08;
+
+    minuteCard.style.marginLeft = gap + 'px';
+    secondCard.style.marginLeft = gap + 'px';
+
+    applyCard(hourCard, bigW, bigH, b * 0.75);
+    applyCard(minuteCard, bigW, bigH, b * 0.75);
+    applyCard(secondCard, secW, secH, secH * 0.54);
+
+    /* 番茄钟：两张与时/分卡同尺寸的卡 */
+    pSec.style.marginLeft = gap + 'px';
+    applyCard(pMin, bigW, bigH, b * 0.75);
+    applyCard(pSec, bigW, bigH, b * 0.75);
+
+    /* 倒计时：时/分/秒三张卡（基准略缩，保证三卡不溢出） */
+    var cb = Math.min(b, w / 4.0);
+    var cW = cb * 1.2, cHh = cb * 1.4;
+    cM.style.marginLeft = (cb * 0.08) + 'px';
+    cS.style.marginLeft = (cb * 0.08) + 'px';
+    applyCard(cH, cW, cHh, cb * 0.75);
+    applyCard(cM, cW, cHh, cb * 0.75);
+    applyCard(cS, cW, cHh, cb * 0.75);
+  }
+
+  layout();
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function () { setTimeout(layout, 300); });
+
+  /* ---------- 单卡翻页 ---------- */
+  function setCard(card, val, animate) {
+    var upper = card.querySelector('.upper span');
+    var lower = card.querySelector('.lower span');
+    var front = card.querySelector('.flap.front span');
+    var back  = card.querySelector('.flap.back span');
+    var old = card.getAttribute('data-v');
+
+    /* 上一次翻页还没收尾（动画进行中又有新写入）：
+       立即结算到翻页目标值，并清掉旧收尾定时器——
+       否则两个定时器先后开火会把数字改来改去（暂停时跳变的根源） */
+    if (card._flipT) {
+      clearTimeout(card._flipT);
+      card._flipT = 0;
+      upper.textContent = back.textContent;   /* 翻页目标值（翻页开始时已写入） */
+      lower.textContent = back.textContent;
+      card.classList.remove('go');
+      card.setAttribute('data-v', back.textContent);
+      old = back.textContent;
+    }
+
+    if (old === val) { return; }   /* 值没变：不写任何 DOM，零渲染开销 */    if (old === null || old === '' || !animate) {
+      upper.textContent = val;
+      lower.textContent = val;
+      card.setAttribute('data-v', val);
+      return;
+    }
+    front.textContent = old;   // 下翻的旧值
+    back.textContent = val;    // 落下的新值
+    upper.textContent = val;   // 上半静态片提前换新值（被前盖住）
+    card.classList.remove('go');
+    void card.offsetWidth;     // 强制 reflow 重启动画
+    card.classList.add('go');
+    card._flipT = setTimeout(function () {
+      card._flipT = 0;
+      upper.textContent = val;
+      lower.textContent = val;
+      card.classList.remove('go');
+      card.setAttribute('data-v', val);
+    }, 540);
+  }
+
+  /* ---------- 12 / 24 小时制切换（点击 AM/PM 角标，localStorage 记住偏好） ---------- */
+  var mode12 = true;
+  try {
+    if (localStorage.getItem('flipclock-hourmode') === '24') { mode12 = false; }
+  } catch (e) { /* 隐私模式等场景下不可用，忽略 */ }
+
+  meridiem.addEventListener('click', function () {
+    mode12 = !mode12;
+    try { localStorage.setItem('flipclock-hourmode', mode12 ? '12' : '24'); } catch (e) {}
+    tick(true);   /* 小时卡会自动翻到新制式的数字 */
+  });
+
+  /* ---------- 番茄钟：25 分钟专注 / 5 分钟休息，时间戳走时（不受 setInterval 误差影响） ---------- */
+  var FOCUS_MS = 25 * 60 * 1000;
+  var BREAK_MS = 5 * 60 * 1000;
+  var pomo = { mode: 'focus', running: false, endAt: 0, remain: FOCUS_MS };
+
+  function pomoFull() { return pomo.mode === 'focus' ? FOCUS_MS : BREAK_MS; }
+
+  function pomoRender(animate) {
+    var remain = pomo.running ? Math.max(0, pomo.endAt - Date.now()) : pomo.remain;
+    var totalSec = Math.ceil(remain / 1000);
+    var mm = Math.floor(totalSec / 60);
+    var ss = totalSec % 60;
+    setCard(pMin, (mm < 10 ? '0' : '') + mm, animate);
+    setCard(pSec, (ss < 10 ? '0' : '') + ss, animate);
+    var st = (pomo.mode === 'focus' ? '专注' : '休息');
+    if (pomoState.textContent !== st) { pomoState.textContent = st; }   /* 没变就不写 DOM */
+  }
+
+  function pomoTick() {
+    if (!pomo.running) { return; }
+    if (pomo.endAt - Date.now() <= 0) {
+      /* 当前段走完：专注 <-> 休息自动交替，无缝继续 */
+      pomo.mode = (pomo.mode === 'focus' ? 'break' : 'focus');
+      pomo.endAt = Date.now() + pomoFull();
+    }
+    pomoRender(true);
+  }
+
+  function pomoReset() {
+    pomo.running = false;
+    pomo.remain = pomoFull();
+    pomoRender(true);
+  }
+
+  /* 轻点 = 开始 / 暂停，双击 = 重置 */
+  var pomoLastTap = 0;
+  pomoCards.addEventListener('click', function () {
+    var t = Date.now();
+    if (t - pomoLastTap < 350) {
+      pomoReset();
+    } else if (pomo.running) {
+      pomo.remain = Math.max(0, pomo.endAt - Date.now());
+      pomo.running = false;
+      pomoRender(true);
+    } else {
+      if (pomo.remain <= 0) { pomo.remain = pomoFull(); }
+      pomo.endAt = Date.now() + pomo.remain;
+      pomo.running = true;
+      pomoRender(true);
+    }
+    pomoLastTap = t;
+  });
+
+  /* ---------- 一小时 / 两小时倒计时（到 0 停住，不循环） ---------- */
+  var H1 = 60 * 60 * 1000;
+  var H2 = 2 * 60 * 60 * 1000;
+  var cd = { running: false, endAt: 0, remain: H1, total: H1 };
+
+  function cdRender(animate) {
+    var remain = cd.running ? Math.max(0, cd.endAt - Date.now()) : cd.remain;
+    var totalSec = Math.ceil(remain / 1000);
+    var hh = Math.floor(totalSec / 3600);
+    var mm = Math.floor((totalSec % 3600) / 60);
+    var ss = totalSec % 60;
+    setCard(cH, (hh < 10 ? '0' : '') + hh, animate);
+    setCard(cM, (mm < 10 ? '0' : '') + mm, animate);
+    setCard(cS, (ss < 10 ? '0' : '') + ss, animate);
+  }
+
+  function cdTick() {
+    if (!cd.running) { return; }
+    if (cd.endAt - Date.now() <= 0) {
+      cd.running = false;
+      cd.remain = 0;
+    }
+    cdRender(true);
+  }
+
+  function cdStart(dur) {
+    cd.total = dur;
+    cd.remain = dur;
+    cd.endAt = Date.now() + dur;
+    cd.running = true;
+  }
+
+  /* 轻点 = 开始 / 暂停，双击 = 重置 */
+  var cdLastTap = 0;
+  cdCards.addEventListener('click', function () {
+    var t = Date.now();
+    if (t - cdLastTap < 350) {
+      cd.running = false;
+      cd.remain = cd.total;
+      cdRender(true);
+    } else if (cd.running) {
+      cd.remain = Math.max(0, cd.endAt - Date.now());
+      cd.running = false;
+      cdRender(true);
+    } else {
+      if (cd.remain <= 0) { cd.remain = cd.total; }
+      cd.endAt = Date.now() + cd.remain;
+      cd.running = true;
+      cdRender(true);
+    }
+    cdLastTap = t;
+  });
+
+  /* ---------- 视图切换（时钟 / 番茄钟 / 倒计时），互不干扰 ----------
+     点非激活按钮 = 进入对应模式；点当前激活的按钮 = 回到时钟 */
+  var currentView = 'clock';
+
+  function showView(v) {
+    currentView = v;
+    clockView.style.display = v === 'clock' ? 'flex' : 'none';
+    pomoView.style.display = v === 'pomo' ? 'flex' : 'none';
+    cdView.style.display = v === 'countdown' ? 'flex' : 'none';
+
+    var cdOn1 = v === 'countdown' && cd.total === H1;
+    var cdOn2 = v === 'countdown' && cd.total === H2;
+    pomoBtn.textContent = v === 'pomo' ? '时钟' : '番茄钟';
+    h1Btn.textContent = cdOn1 ? '时钟' : '一小时';
+    h2Btn.textContent = cdOn2 ? '时钟' : '两小时';
+    /* 激活项略亮，其余保持很淡 */
+    pomoBtn.style.opacity = v === 'pomo' ? '0.5' : '';
+    h1Btn.style.opacity = cdOn1 ? '0.5' : '';
+    h2Btn.style.opacity = cdOn2 ? '0.5' : '';
+
+    if (v === 'pomo') { pomoRender(true); }
+    if (v === 'countdown') { cdRender(true); }
+  }
+
+  pomoBtn.addEventListener('click', function () {
+    showView(currentView === 'pomo' ? 'clock' : 'pomo');
+  });
+  h1Btn.addEventListener('click', function () {
+    if (currentView === 'countdown' && cd.total === H1) { showView('clock'); return; }
+    cdStart(H1);
+    showView('countdown');
+  });
+  h2Btn.addEventListener('click', function () {
+    if (currentView === 'countdown' && cd.total === H2) { showView('clock'); return; }
+    cdStart(H2);
+    showView('countdown');
+  });
+
+  /* ---------- 时间维护：纯本地时间，每 5 分钟重新对一次系统时钟 ---------- */
+  var baseTime = Date.now();
+  var baseAt = Date.now();
+
+  function resync() {
+    baseTime = Date.now();
+    baseAt = baseTime;
+  }
+
+  function tick(animate) {
+    var now = baseTime + (Date.now() - baseAt);
+    var d = new Date(now);
+    var h24 = d.getHours();
+    var h12 = h24 % 12;
+    if (h12 === 0) { h12 = 12; }
+    var mm = d.getMinutes();
+    var ss = d.getSeconds();
+    var mStr = (mm < 10 ? '0' : '') + mm;
+    var sStr = (ss < 10 ? '0' : '') + ss;
+
+    var md = mode12 ? (h24 < 12 ? 'AM' : 'PM') : '24H';
+    if (meridiem.textContent !== md) { meridiem.textContent = md; }   /* 没变就不写 DOM */
+    setCard(hourCard, mode12 ? String(h12) : ((h24 < 10 ? '0' : '') + h24), animate);
+    setCard(minuteCard, mStr, animate);
+    setCard(secondCard, sStr, animate);
+  }
+
+  /* 每秒检查一次，只有变化的数字才翻页；三个计时体都持续走时（切换视图不丢状态） */
+  setInterval(function () {
+    tick(true);
+    pomoTick();
+    cdTick();
+  }, 1000);
+
+  /* 每 5 分钟向系统时钟校准一次（本地时间，无任何网络请求） */
+  setInterval(resync, 5 * 60 * 1000);
+
+  /* 从后台切回前台时立即校准，防止走时漂移（番茄钟/倒计时基于时间戳，自动纠正） */
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      resync();
+      tick(true);
+      pomoTick();
+      cdTick();
+    }
+  });
+
+  /* 初始化（首帧直接就位，不翻页） */
+  resync();
+  tick(false);
+  pomoRender(false);
+  cdRender(false);
+
+  /* 轻点屏幕尝试进入全屏（iPadOS 16.4+ 有效；iPadOS 14 Safari 不支持元素全屏，
+     请用「添加到主屏幕」方式获得全屏，见 meta 配置） */
+  document.addEventListener('click', function () {
+    var el = document.documentElement;
+    var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (fn && !document.fullscreenElement && !document.webkitFullscreenElement) {
+      try { fn.call(el); } catch (e) { /* iPadOS 14 上静默失败即可 */ }
+    }
+  });
+
+  /* 屏蔽 iOS 的滚动回弹（双击缩放已由 CSS touch-action: manipulation 禁用；
+     注意不要在 touchend 上 preventDefault——iOS 会因此吞掉第二次轻点的 click，
+     导致番茄钟「双击重置」失效） */
+  document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+})();
+</script>
+</body>
+</html>
