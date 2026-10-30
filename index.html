@@ -62,8 +62,6 @@
     font-size: 132px;
     font-weight: 700;
     color: #fff;
-    -webkit-perspective: 600px;
-    perspective: 600px;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
     -webkit-flex: none;
@@ -120,8 +118,6 @@
     background: -webkit-linear-gradient(top, #303036 0%, #1e1e22 100%);
     background: linear-gradient(180deg, #303036 0%, #1e1e22 100%);
     display: none;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
   }
   .flap.front {
     top: 0;
@@ -354,8 +350,6 @@
     s.width = w + 'px';
     s.height = h + 'px';
     s.fontSize = fs + 'px';
-    s.webkitPerspective = (w * 4) + 'px';
-    s.perspective = (w * 4) + 'px';
     var up = card.querySelector('.upper');
     var lo = card.querySelector('.lower');
     var fr = card.querySelector('.flap.front');
@@ -375,36 +369,49 @@
   function layout() {
     var w = document.documentElement.clientWidth;
     var h = document.documentElement.clientHeight;
+    var GAP = 0.08;                  /* 卡间距 = 0.08 × 基准 */
+    var LABEL = 26 + 16 + 26 + 13;   /* 番茄钟/倒计时视图的标签与提示占位 */
+    var phoneLs = h < 500 && w > h;  /* 手机横屏 */
+
     /*
-      三卡布局：时/分/秒各一张卡（两位数字同卡）
-      时/分卡：宽 = 1.2 倍基准（增宽 20%），高 = 1.4b（与第一版一致）
-      秒卡：宽度不增宽（= b），高度 = 分钟卡的一半（0.7b），三者底对齐
+      尺寸策略：
+      - iPad / 电脑（横竖屏）：保持原版尺寸 b = min(屏高 30%, 屏宽 24%)
+      - 手机横屏：屏幕又矮又宽，按宽度 94% 撑满
+        时钟视图 3 张卡共 3.56b、番茄钟 2.48b、倒计时 3.76b
     */
-    var b = Math.min(h * 0.30, w * 0.24);
+    var b, bp, bd;
+    if (!phoneLs) {
+      b = Math.min(h * 0.30, w * 0.24);
+      bp = b;
+      bd = Math.min(b, w / 4.0);
+    } else {
+      b = Math.min(w * 0.94 / 3.56, h * 0.86 / 1.4);
+      bp = Math.min(w * 0.94 / 2.48, (h - LABEL) * 0.98 / 1.4);
+      bd = Math.min(w * 0.94 / 3.76, (h - LABEL) * 0.98 / 1.4);
+    }
+
+    /* 时钟视图 */
     var bigW = b * 1.2, bigH = b * 1.4;
     var secW = b, secH = bigH * 0.5;
-    var gap = b * 0.08;
-
-    minuteCard.style.marginLeft = gap + 'px';
-    secondCard.style.marginLeft = gap + 'px';
-
+    minuteCard.style.marginLeft = (b * GAP) + 'px';
+    secondCard.style.marginLeft = (b * GAP) + 'px';
     applyCard(hourCard, bigW, bigH, b * 0.75);
     applyCard(minuteCard, bigW, bigH, b * 0.75);
     applyCard(secondCard, secW, secH, secH * 0.54);
 
-    /* 番茄钟：两张与时/分卡同尺寸的卡 */
-    pSec.style.marginLeft = gap + 'px';
-    applyCard(pMin, bigW, bigH, b * 0.75);
-    applyCard(pSec, bigW, bigH, b * 0.75);
+    /* 番茄钟视图 */
+    var pW = bp * 1.2, pH = bp * 1.4;
+    pSec.style.marginLeft = (bp * GAP) + 'px';
+    applyCard(pMin, pW, pH, bp * 0.75);
+    applyCard(pSec, pW, pH, bp * 0.75);
 
-    /* 倒计时：时/分/秒三张卡（基准略缩，保证三卡不溢出） */
-    var cb = Math.min(b, w / 4.0);
-    var cW = cb * 1.2, cHh = cb * 1.4;
-    cM.style.marginLeft = (cb * 0.08) + 'px';
-    cS.style.marginLeft = (cb * 0.08) + 'px';
-    applyCard(cH, cW, cHh, cb * 0.75);
-    applyCard(cM, cW, cHh, cb * 0.75);
-    applyCard(cS, cW, cHh, cb * 0.75);
+    /* 倒计时视图 */
+    var cW = bd * 1.2, cHh = bd * 1.4;
+    cM.style.marginLeft = (bd * GAP) + 'px';
+    cS.style.marginLeft = (bd * GAP) + 'px';
+    applyCard(cH, cW, cHh, bd * 0.75);
+    applyCard(cM, cW, cHh, bd * 0.75);
+    applyCard(cS, cW, cHh, bd * 0.75);
   }
 
   layout();
@@ -483,14 +490,14 @@
     if (pomoState.textContent !== st) { pomoState.textContent = st; }   /* 没变就不写 DOM */
   }
 
-  function pomoTick() {
+  function pomoTick(animate) {
     if (!pomo.running) { return; }
     if (pomo.endAt - Date.now() <= 0) {
       /* 当前段走完：专注 <-> 休息自动交替，无缝继续 */
       pomo.mode = (pomo.mode === 'focus' ? 'break' : 'focus');
       pomo.endAt = Date.now() + pomoFull();
     }
-    pomoRender(true);
+    pomoRender(animate !== false);
   }
 
   function pomoReset() {
@@ -534,13 +541,13 @@
     setCard(cS, (ss < 10 ? '0' : '') + ss, animate);
   }
 
-  function cdTick() {
+  function cdTick(animate) {
     if (!cd.running) { return; }
     if (cd.endAt - Date.now() <= 0) {
       cd.running = false;
       cd.remain = 0;
     }
-    cdRender(true);
+    cdRender(animate !== false);
   }
 
   function cdStart(dur) {
@@ -609,18 +616,9 @@
     showView('countdown');
   });
 
-  /* ---------- 时间维护：纯本地时间，每 5 分钟重新对一次系统时钟 ---------- */
-  var baseTime = Date.now();
-  var baseAt = Date.now();
-
-  function resync() {
-    baseTime = Date.now();
-    baseAt = baseTime;
-  }
-
+  /* ---------- 时间维护：直接读系统时间（Date.now() 即本地时间，零漂移） ---------- */
   function tick(animate) {
-    var now = baseTime + (Date.now() - baseAt);
-    var d = new Date(now);
+    var d = new Date();
     var h24 = d.getHours();
     var h12 = h24 % 12;
     if (h12 === 0) { h12 = 12; }
@@ -636,28 +634,35 @@
     setCard(secondCard, sStr, animate);
   }
 
-  /* 每秒检查一次，只有变化的数字才翻页；三个计时体都持续走时（切换视图不丢状态） */
-  setInterval(function () {
-    tick(true);
-    pomoTick();
-    cdTick();
-  }, 1000);
+  /* ---------- 主循环（极致省电） ----------
+     1. 不用固定 setInterval：改为对齐真实秒边界的 setTimeout 链，
+        每次唤醒都落在秒变化的瞬间，绝不空转，数字永远及时
+     2. 页面隐藏（熄屏/切后台）时彻底清除定时器，JS 完全休眠；
+        回到前台再重启，时间照读系统时钟，天然准确
+     3. 只有当前视图的计时体做带动画渲染，隐藏视图静默更新 */
+  var mainTimer = null;
 
-  /* 每 5 分钟向系统时钟校准一次（本地时间，无任何网络请求） */
-  setInterval(resync, 5 * 60 * 1000);
+  function loopTick() {
+    tick(currentView === 'clock');
+    pomoTick(currentView === 'pomo');
+    cdTick(currentView === 'countdown');
+    mainTimer = setTimeout(loopTick, 1020 - (Date.now() % 1000));
+  }
 
-  /* 从后台切回前台时立即校准，防止走时漂移（番茄钟/倒计时基于时间戳，自动纠正） */
+  function startLoop() {
+    if (mainTimer === null) { mainTimer = setTimeout(loopTick, 20); }
+  }
+
+  function stopLoop() {
+    if (mainTimer !== null) { clearTimeout(mainTimer); mainTimer = null; }
+  }
+
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) {
-      resync();
-      tick(true);
-      pomoTick();
-      cdTick();
-    }
+    if (document.hidden) { stopLoop(); } else { startLoop(); }
   });
+  startLoop();
 
   /* 初始化（首帧直接就位，不翻页） */
-  resync();
   tick(false);
   pomoRender(false);
   cdRender(false);
