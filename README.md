@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/poster.png" alt="Tempo — 一块挂在屏幕里的苹果翻页钟" width="100%">
+<img src="assets/poster.jpg" alt="Tempo — 一块挂在屏幕里的苹果翻页钟" width="100%">
 
 # ⏱ Tempo
 
