@@ -66,6 +66,9 @@
     letter-spacing: -0.02em;
     -webkit-flex: none;
     flex: none;
+    /* 省电：把重绘/布局失效严格限制在卡片盒内，翻页时不再波及页面其他区域 */
+    -webkit-contain: layout paint;
+    contain: layout paint;
   }
 
   /* 静态上下两半（裁剪窗口） */
@@ -108,7 +111,8 @@
   .half.upper span, .flap.front span { top: 0; }     /* 显示字形上半 */
   .half.lower span, .flap.back span  { top: -100%; } /* 上移一整卡，显示字形下半 */
 
-  /* 翻页动片 */
+  /* 翻页动片（省电：常驻渲染但透明，配合 will-change 让合成层常驻，
+     避免每秒一次的层创建/销毁；隐藏视图 display:none 无层，不受影响） */
   .flap {
     position: absolute;
     left: 0;
@@ -117,8 +121,13 @@
     overflow: hidden;
     background: -webkit-linear-gradient(top, #303036 0%, #1e1e22 100%);
     background: linear-gradient(180deg, #303036 0%, #1e1e22 100%);
-    display: none;
+    display: block;
+    opacity: 0;
+    pointer-events: none;   /* 常驻渲染但透明：绝不拦截点击（番茄钟/角标的点击区域在卡片上） */
+    -webkit-will-change: transform;
+    will-change: transform;
   }
+  .card.goA .flap, .card.goB .flap { opacity: 1; }
   .flap.front {
     top: 0;
     z-index: 3;
@@ -135,39 +144,70 @@
   }
 
   /*
-    翻页动画（关键兼容性决策）：
-    不用 3D rotateX（iPadOS Safari 对 overflow:hidden + 3D 动画的渲染有怪癖，
-    下半片会异常）。改用 2D scaleY 压缩翻转：
-    - 前片（上半、旧值）：scaleY 1 → 0，向折缝压合
-    - 后片（下半、新值）：scaleY 0 → 1，从折缝展开
-    所有浏览器渲染一致。
+    翻页动画（关键兼容性 + 省电决策）：
+    - 不用 3D rotateX（iPadOS Safari 对 overflow:hidden + 3D 动画的渲染有怪癖），
+      用 2D scaleY 压缩翻转：前片 1→0 压合，后片 0→1 展开
+    - 总时长约 500ms（前片 0.25s + 后片 0.25s），翻页节奏与之前观感一致
+    - A/B 两组同形 keyframes 交替播放：翻页时只换动画名即可重播，
+      省掉每秒一次的强制 reflow（void offsetWidth）
   */
-  .card.go .flap { display: block; }
-  .card.go .flap.front {
+  .card.goA .flap.front {
     -webkit-transform-origin: 50% 100%;
     transform-origin: 50% 100%;
-    -webkit-animation: flipTop 0.22s ease-in both;
-    animation: flipTop 0.22s ease-in both;
+    -webkit-animation: flipTopA 0.25s ease-in both;
+    animation: flipTopA 0.25s ease-in both;
   }
-  .card.go .flap.back {
+  .card.goA .flap.back {
     -webkit-transform-origin: 50% 0%;
     transform-origin: 50% 0%;
-    -webkit-animation: flipBottom 0.22s 0.22s ease-out both;
-    animation: flipBottom 0.22s 0.22s ease-out both;
+    -webkit-animation: flipBottomA 0.25s 0.25s ease-out both;
+    animation: flipBottomA 0.25s 0.25s ease-out both;
   }
-  @-webkit-keyframes flipTop {
+  .card.goB .flap.front {
+    -webkit-transform-origin: 50% 100%;
+    transform-origin: 50% 100%;
+    -webkit-animation: flipTopB 0.25s ease-in both;
+    animation: flipTopB 0.25s ease-in both;
+  }
+  .card.goB .flap.back {
+    -webkit-transform-origin: 50% 0%;
+    transform-origin: 50% 0%;
+    -webkit-animation: flipBottomB 0.25s 0.25s ease-out both;
+    animation: flipBottomB 0.25s 0.25s ease-out both;
+  }
+  @-webkit-keyframes flipTopA {
     from { -webkit-transform: scaleY(1); }
     to   { -webkit-transform: scaleY(0); }
   }
-  @keyframes flipTop {
+  @keyframes flipTopA {
     from { transform: scaleY(1); }
     to   { transform: scaleY(0); }
   }
-  @-webkit-keyframes flipBottom {
+  @-webkit-keyframes flipBottomA {
     from { -webkit-transform: scaleY(0); }
     to   { -webkit-transform: scaleY(1); }
   }
-  @keyframes flipBottom {
+  @-webkit-keyframes flipBottomA {
+    from { -webkit-transform: scaleY(0); }
+    to   { -webkit-transform: scaleY(1); }
+  }
+  @keyframes flipBottomA {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+  }
+  @-webkit-keyframes flipTopB {
+    from { -webkit-transform: scaleY(1); }
+    to   { -webkit-transform: scaleY(0); }
+  }
+  @keyframes flipTopB {
+    from { transform: scaleY(1); }
+    to   { transform: scaleY(0); }
+  }
+  @-webkit-keyframes flipBottomB {
+    from { -webkit-transform: scaleY(0); }
+    to   { -webkit-transform: scaleY(1); }
+  }
+  @keyframes flipBottomB {
     from { transform: scaleY(0); }
     to   { transform: scaleY(1); }
   }
@@ -434,12 +474,14 @@
       card._flipT = 0;
       upper.textContent = back.textContent;   /* 翻页目标值（翻页开始时已写入） */
       lower.textContent = back.textContent;
-      card.classList.remove('go');
+      card.classList.remove('goA');
+      card.classList.remove('goB');
       card.setAttribute('data-v', back.textContent);
       old = back.textContent;
     }
 
-    if (old === val) { return; }   /* 值没变：不写任何 DOM，零渲染开销 */    if (old === null || old === '' || !animate) {
+    if (old === val) { return; }   /* 值没变：不写任何 DOM，零渲染开销 */
+    if (old === null || old === '' || !animate) {
       upper.textContent = val;
       lower.textContent = val;
       card.setAttribute('data-v', val);
@@ -448,14 +490,17 @@
     front.textContent = old;   // 下翻的旧值
     back.textContent = val;    // 落下的新值
     upper.textContent = val;   // 上半静态片提前换新值（被前盖住）
-    card.classList.remove('go');
-    void card.offsetWidth;     // 强制 reflow 重启动画
-    card.classList.add('go');
+    /* A/B 两组动画交替播放：换个类名浏览器就自动重播，无需强制 reflow */
+    card._alt = !card._alt;
+    var goCls = card._alt ? 'goA' : 'goB';
+    card.classList.remove('goA');
+    card.classList.remove('goB');
+    card.classList.add(goCls);
     card._flipT = setTimeout(function () {
       card._flipT = 0;
       upper.textContent = val;
       lower.textContent = val;
-      card.classList.remove('go');
+      card.classList.remove(goCls);
       card.setAttribute('data-v', val);
     }, 540);
   }
