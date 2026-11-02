@@ -561,24 +561,65 @@
     pomoRender(true);
   }
 
-  /* 轻点 = 开始 / 暂停，双击 = 重置 */
-  var pomoLastTap = 0;
-  pomoCards.addEventListener('click', function () {
-    var t = Date.now();
-    if (t - pomoLastTap < 350) {
-      pomoReset();
-    } else if (pomo.running) {
-      pomo.remain = Math.max(0, pomo.endAt - Date.now());
-      pomo.running = false;
-      pomoRender(true);
-    } else {
-      if (pomo.remain <= 0) { pomo.remain = pomoFull(); }
-      pomo.endAt = Date.now() + pomo.remain;
-      pomo.running = true;
-      pomoRender(true);
+  /* ---------- 轻点 = 开始 / 暂停，双击 = 重置（单击/双击冲突的严谨解法） ----------
+     旧实现的问题：第一击立即执行暂停/开始，第二击若落在 350ms 内才重置。两个缺陷：
+     1) 双击的第一下永远会先闪一次「暂停-继续」，体验割裂（结构性问题）；
+     2) iPadOS 对快速双击的第二下会延迟合成 click（系统要先判定手势），
+        实测两下 click 的间隔经常超过 350ms，第二击被当成新的单击，
+        重置因此彻底失灵。
+     现在的方案（三层保障）：
+     a) 用 touchend（真实手指离开时刻）做计时基准，绕开 iOS 的 click 合成延迟；
+        桌面鼠标（无触摸）走 click 兜底；触摸后 800ms 内的衍生 ghost click 一律
+        丢弃，防止触摸 + click 双触发；
+     b) 单击动作不再立即执行，而是挂起 300ms：窗口内来了第二击 → 取消单击、
+        只执行重置；窗口内没有第二击 → 才真正执行开始/暂停
+        （暂停时剩余时间按当下时刻结算，一秒不丢）；
+     c) 三击 = 单击 + 双击，行为可预期（例如：暂停后紧跟重置）。 */
+  function bindTapControls(el, onSingle, onDouble) {
+    var pendingTimer = null;   /* 双击判定窗口内挂起的单击动作 */
+    var lastTouchEnd = 0;      /* 触摸时刻，用于丢弃 iOS 衍生的 ghost click */
+
+    function onTap() {
+      if (pendingTimer !== null) {
+        /* 第二击落在窗口内：确认是双击，取消待执行的单击 */
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+        onDouble();
+      } else {
+        pendingTimer = setTimeout(function () {
+          pendingTimer = null;
+          onSingle();
+        }, 300);
+      }
     }
-    pomoLastTap = t;
-  });
+
+    el.addEventListener('touchend', function (e) {
+      if (e.changedTouches.length !== 1 || e.touches.length !== 0) { return; }
+      lastTouchEnd = Date.now();
+      onTap();
+    });
+    el.addEventListener('click', function () {
+      if (Date.now() - lastTouchEnd < 800) { return; }   /* 触摸的衍生 click，已处理 */
+      onTap();
+    });
+  }
+
+  /* 番茄钟：轻点开始 / 暂停，双击重置 */
+  bindTapControls(
+    pomoCards,
+    function () {
+      if (pomo.running) {
+        pomo.remain = Math.max(0, pomo.endAt - Date.now());
+        pomo.running = false;
+      } else {
+        if (pomo.remain <= 0) { pomo.remain = pomoFull(); }
+        pomo.endAt = Date.now() + pomo.remain;
+        pomo.running = true;
+      }
+      pomoRender(true);
+    },
+    pomoReset
+  );
 
   /* ---------- 一小时 / 两小时倒计时（到 0 停住，不循环） ---------- */
   var H1 = 60 * 60 * 1000;
@@ -616,26 +657,26 @@
     cd.running = true;
   }
 
-  /* 轻点 = 开始 / 暂停，双击 = 重置 */
-  var cdLastTap = 0;
-  cdCards.addEventListener('click', function () {
-    var t = Date.now();
-    if (t - cdLastTap < 350) {
+  /* 倒计时：轻点开始 / 暂停，双击重置（复用同一套单击/双击判定） */
+  bindTapControls(
+    cdCards,
+    function () {
+      if (cd.running) {
+        cd.remain = Math.max(0, cd.endAt - Date.now());
+        cd.running = false;
+      } else {
+        if (cd.remain <= 0) { cd.remain = cd.total; }
+        cd.endAt = Date.now() + cd.remain;
+        cd.running = true;
+      }
+      cdRender(true);
+    },
+    function () {
       cd.running = false;
       cd.remain = cd.total;
       cdRender(true);
-    } else if (cd.running) {
-      cd.remain = Math.max(0, cd.endAt - Date.now());
-      cd.running = false;
-      cdRender(true);
-    } else {
-      if (cd.remain <= 0) { cd.remain = cd.total; }
-      cd.endAt = Date.now() + cd.remain;
-      cd.running = true;
-      cdRender(true);
     }
-    cdLastTap = t;
-  });
+  );
 
   /* ---------- 视图切换（时钟 / 番茄钟 / 倒计时），互不干扰 ----------
      点非激活按钮 = 进入对应模式；点当前激活的按钮 = 回到时钟 */
