@@ -131,21 +131,7 @@
     display: none;
     pointer-events: none;   /* 保险：翻页过程中也绝不拦截点击 */
   }
-  /* 省电决策（视觉零差异）：
-     - 翻页片是瞬态层（display:none 待机），动画期内的 will-change
-       不产生任何待机驻留成本，但换来 GPU 合成的确定性；
-     - 后片也必须显式提升：WebKit 14 上"动画启动时自动提升"不可靠，
-       后片曾因此掉到主线程逐帧重绘（每秒 500ms 主线程动画），
-       实测耗电反升——省小钱亏大钱，两片都提升才是真省电；
-     - 后片静态样式是 scaleY(0)，与 backwards fill 的 from 帧互为双保险：
-       个别 WebKit 版本在延迟期对 fill 值有解析怪癖（实测 Chromium 会间歇性
-       回退到静态/误用结束帧），两层防护都指向"不可见"，任何路径都不会闪现。 */
-  .card.goA .flap.front, .card.goB .flap.front {
-    display: block;
-    -webkit-will-change: transform;
-    will-change: transform;
-  }
-  .card.goA .flap.back, .card.goB .flap.back {
+  .card.goA .flap, .card.goB .flap {
     display: block;
     -webkit-will-change: transform;
     will-change: transform;
@@ -160,10 +146,6 @@
   .flap.back {
     bottom: 0;
     z-index: 2;
-    /* 静态压扁：延迟期（前 250ms）无需动画 backwards fill 也保持不可见，
-       合成层只在真正动画的 250ms 内存在 */
-    -webkit-transform: scaleY(0);
-    transform: scaleY(0);
     background: -webkit-linear-gradient(top, #232327 0%, #1a1a1e 100%);
     background: linear-gradient(180deg, #232327 0%, #1a1a1e 100%);
     box-shadow: inset 0 1px 0 rgba(0,0,0,0.9);
@@ -485,21 +467,12 @@
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', function () { setTimeout(layout, 300); });
 
-  /* ---------- 单卡翻页 ----------
-     省电：四张数字片的引用缓存在 card._refs 上。翻页每秒发生，
-     若每次都 querySelector，仅秒卡就产生 4 次/秒的 DOM 树查询 × 时钟+番茄+倒计时
-     共 8 张卡——全部省掉。 */
+  /* ---------- 单卡翻页 ---------- */
   function setCard(card, val, animate) {
-    var refs = card._refs;
-    if (!refs) {
-      refs = card._refs = {
-        upper: card.querySelector('.upper span'),
-        lower: card.querySelector('.lower span'),
-        front: card.querySelector('.flap.front span'),
-        back:  card.querySelector('.flap.back span')
-      };
-    }
-    var upper = refs.upper, lower = refs.lower, front = refs.front, back = refs.back;
+    var upper = card.querySelector('.upper span');
+    var lower = card.querySelector('.lower span');
+    var front = card.querySelector('.flap.front span');
+    var back  = card.querySelector('.flap.back span');
     var old = card.getAttribute('data-v');
 
     /* 上一次翻页还没收尾（动画进行中又有新写入）：
@@ -725,7 +698,6 @@
     h1Btn.style.opacity = cdOn1 ? '0.5' : '';
     h2Btn.style.opacity = cdOn2 ? '0.5' : '';
 
-    if (v === 'clock') { tick(false); }      /* 回到时钟：隐藏期间未更新，直接对齐当前值 */
     if (v === 'pomo') { pomoRender(true); }
     if (v === 'countdown') { cdRender(true); }
   }
@@ -767,47 +739,21 @@
         每次唤醒都落在秒变化的瞬间，绝不空转，数字永远及时
      2. 页面隐藏（熄屏/切后台）时彻底清除定时器，JS 完全休眠；
         回到前台再重启，时间照读系统时钟，天然准确
-     3. 每秒只更新当前视图的计时体：隐藏视图零 DOM 写入
-        （切换视图时 showView 会立即补齐到当前值，精确性不受影响——
-        番茄钟/倒计时走的是绝对时间戳 endAt，不靠每秒渲染维持准确性） */
+     3. 只有当前视图的计时体做带动画渲染，隐藏视图静默更新 */
   var mainTimer = null;
   var lastLoopAt = Date.now();
 
-  /* ---------- 渲染停摆看门狗（锁屏检测的关键补丁） ----------
-     iPadOS 14 主屏模式（添加到主屏幕）锁屏时的真实行为：
-     - visibilitychange 不触发（document.hidden 仍是 false）
-     - JS 定时器照常运行（挂起看门狗永远等不到 3 秒间隔）
-     —— 但锁屏期间 requestAnimationFrame 绝对不会回调（显示刷新停止）。
-     所以每秒顺带请求一个 rAF 探针：正常时 ~1 秒内必回调；
-     解锁后第一个回调的时间戳与上次的差值 = 锁屏时长，
-     超过 2 秒即判定"经历过锁屏" → 强制全量重绘。
-     这是不依赖任何事件的确定性锁屏检测，专治 14.x 主屏模式的全部盲区。 */
-  var rafPending = false;
-  var lastRAFts = 0;
-  function rafWatch(ts) {
-    rafPending = false;
-    if (lastRAFts && ts - lastRAFts > 2000) {
-      repaintKick();
-      ensureAwake();   /* 锁屏期间系统会暂停循环视频，解锁后立即恢复常亮 */
-    }
-    lastRAFts = ts;
-  }
-
   function loopTick() {
-    /* 挂起看门狗：系统挂起 JS 后定时器必然迟到——实际间隔超过 3 秒
-       即视为经历了一次挂起，无论 visibilitychange 是否送达都强制全量重绘 */
+    /* 挂起看门狗：主屏幕模式下锁屏/解锁可能不触发 visibilitychange，
+       但系统挂起 JS 后定时器必然迟到——实际间隔超过 3 秒即视为经历了一次挂起，
+       无论事件是否送达都强制全量重绘，保证裁切修复零漏网 */
     var now = Date.now();
     if (now - lastLoopAt > 3000) { repaintKick(); }
     lastLoopAt = now;
 
-    if (currentView === 'clock') {
-      tick(true);
-    } else if (currentView === 'pomo') {
-      pomoTick(true);
-    } else {
-      cdTick(true);
-    }
-    if (!rafPending) { rafPending = true; requestAnimationFrame(rafWatch); }
+    tick(currentView === 'clock');
+    pomoTick(currentView === 'pomo');
+    cdTick(currentView === 'countdown');
     mainTimer = setTimeout(loopTick, 1020 - (Date.now() % 1000));
   }
 
@@ -827,11 +773,7 @@
      第一段：body display:none -> 强制 reflow -> 恢复，整个渲染树拆除重建，
              这是 iOS 上唯一保证全量重绘的方式（刚好从锁屏回来，一帧黑屏无感知）；
      第二段：400ms 后对卡片和翻页片做「销毁合成层再重建」兜底 Safari 的延迟重建。 */
-  var lastKickAt = 0;
   function repaintKick() {
-    var n = Date.now();
-    if (n - lastKickAt < 2000) { return; }   /* 防抖：多个看门狗接连触发只重建一次 */
-    lastKickAt = n;
     var b = document.body;
     b.style.display = 'none';
     void b.offsetHeight;          /* 强制同步 reflow，渲染树整体重建 */
@@ -860,48 +802,32 @@
     }, 400);
   }
 
-  /* ---------- 屏幕常亮（策略按系统自动降级，全部零可见痕迹） ----------
+  /* ---------- 屏幕常亮（三层策略，按系统自动降级，全部零可见痕迹） ----------
      A) iPadOS 16.4+：官方 Wake Lock API 申请屏幕常亮，零额外开销；
         系统会在切后台时自动释放，回前台重新申请
-     B) 老系统（如 14.3，无 Wake Lock API）：持续循环播放的无声小视频
-        （16×16、1.6KB 内嵌）。iOS 只要"有视频正在播放"就不会自动息屏——
-        这是 14.x 上唯一可靠的网页端常亮手段。
-        注意：旧版"每 10 分钟播 1.5 秒脉冲"已被 iPadOS 14.3 实测证伪——
-        短暂播放并不重置息屏倒计时。持续循环才是可靠的；
-        静音内联视频允许程序化 play()，16×16 硬件解码的功耗
-        相对屏幕背光完全可忽略（常亮本身就是最大的耗电项，这是必要成本）
-     C) 视频在页面隐藏/锁屏时由系统暂停，回到前台/解锁时立即恢复播放 */
+     B) 老系统兜底：每 10 分钟播放一次 1.5 秒的无声小视频（1.6KB 内嵌）。
+        iOS 的息屏倒计时会在媒体播放结束时重新计时——
+        每 10 分钟"续一口气"，30 分钟的倒计时永远走不到头 → 永不息屏，
+        比持续播放省电得多（视频解码时间仅占 0.25%）
+     C) 以上都不生效时：请到 设置-显示与亮度-自动锁定 选择最长档位配合 */
   var WAKE_VIDEO = 'data:video/mp4;base64,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';
-  var wakeVideo = null;   /* 懒创建：只有真正需要媒体脉冲时才把 <video> 挂进 DOM，
-                             Wake Lock 可用的系统上可能永远不需要它 */
+  var wakeVideo = document.createElement('video');
+  wakeVideo.muted = true;
+  wakeVideo.setAttribute('playsinline', '');
+  wakeVideo.setAttribute('webkit-playsinline', '');
+  wakeVideo.setAttribute('preload', 'auto');
+  wakeVideo.style.cssText = 'position:fixed;left:0;bottom:0;width:16px;height:16px;opacity:0.001;pointer-events:none;z-index:-1;';
+  wakeVideo.src = WAKE_VIDEO;
+  document.body.appendChild(wakeVideo);
 
-  function ensureWakeVideo() {
-    if (wakeVideo) { return wakeVideo; }
-    var v = document.createElement('video');
-    v.muted = true;
-    v.loop = true;                 /* 持续循环：iOS 14 上只有"正在播放"才阻止息屏 */
-    v.setAttribute('playsinline', '');
-    v.setAttribute('webkit-playsinline', '');
-    v.setAttribute('preload', 'none');   /* 不预载，play() 时才加载（data URI 秒解） */
-    v.style.cssText = 'position:fixed;left:0;bottom:0;width:16px;height:16px;opacity:0.001;pointer-events:none;z-index:-1;';
-    v.src = WAKE_VIDEO;
-    document.body.appendChild(v);
-    wakeVideo = v;
-    return v;
-  }
-
-  /* 常亮保活入口：Wake Lock 已生效时不碰媒体（解码管线纯属浪费）；
-     不可用（14.3 等老系统）则确保循环视频正在播放。
-     可被反复调用（幂等）：回前台、解锁（rAF 看门狗）、首次手势时都调一次 */
-  function ensureAwake() {
-    if (document.hidden || wakeLockObj) { return; }
-    var v = ensureWakeVideo();
-    if (v.paused) {
-      try {
-        var p = v.play();
-        if (p && p.catch) { p.catch(function () {}); }   /* 不支持时静默降级 */
-      } catch (e) { /* 同上 */ }
-    }
+  function videoPulse() {
+    if (document.hidden) { return; }
+    try {
+      wakeVideo.currentTime = 0;
+      var p = wakeVideo.play();
+      if (p && p.catch) { p.catch(function () {}); }   /* 不支持时静默降级 */
+      setTimeout(function () { try { wakeVideo.pause(); } catch (e) {} }, 1500);
+    } catch (e) { /* 同上 */ }
   }
 
   var wakeLockObj = null;
@@ -909,38 +835,26 @@
     if (!navigator.wakeLock || document.hidden || wakeLockObj) { return; }
     navigator.wakeLock.request('screen').then(function (l) {
       wakeLockObj = l;
-      /* 拿到官方 Wake Lock 后停掉循环视频（如果此前老系统逻辑已在播） */
-      if (wakeVideo && !wakeVideo.paused) { try { wakeVideo.pause(); } catch (e) {} }
       if (l.addEventListener) {
-        l.addEventListener('release', function () { wakeLockObj = null; ensureAwake(); });
+        l.addEventListener('release', function () { wakeLockObj = null; });
       }
     }).catch(function () {});
   }
 
+  setInterval(videoPulse, 10 * 60 * 1000);   /* 每 10 分钟续一次息屏倒计时 */
+
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       stopLoop();
-      /* 隐藏期间系统本来就会暂停视频，这里显式暂停确保万无一失 */
-      if (wakeVideo && !wakeVideo.paused) { try { wakeVideo.pause(); } catch (e) {} }
     } else {
       startLoop();
       repaintKick();      /* 修复锁屏回来卡片局部被裁切 */
-      requestWakeLock();  /* 回前台重新申请 Wake Lock（异步） */
-      /* 延迟 1.5s：给 Wake Lock 申请留时间，成功则不碰视频，失败才启动循环播放 */
-      setTimeout(ensureAwake, 1500);
+      requestWakeLock();  /* 回前台重新申请 Wake Lock */
+      videoPulse();       /* 顺手把息屏倒计时也续上 */
     }
   });
-  /* pageshow 在首次加载也会触发（persisted=false），那时无需重绘；
-     只有从 bfcache 恢复（persisted=true）才需要全量重建 */
-  window.addEventListener('pageshow', function (e) {
-    if (e.persisted) { repaintKick(); ensureAwake(); }
-  });
-  /* 首次用户手势兜底：个别 iOS 版本对无手势的程序化 play() 有拦截，
-     主屏图标启动本身算手势，但再挂一道保险零成本 */
-  document.addEventListener('touchstart', ensureAwake, { once: true, passive: true });
+  window.addEventListener('pageshow', repaintKick);   /* 从后台整页恢复时同样踢一脚 */
   startLoop();
-  requestWakeLock();
-  setTimeout(ensureAwake, 1500);
 
   /* 初始化（首帧直接就位，不翻页） */
   tick(false);
