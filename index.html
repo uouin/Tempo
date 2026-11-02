@@ -114,8 +114,12 @@
   .half.upper span, .flap.front span { top: 0; }     /* 显示字形上半 */
   .half.lower span, .flap.back span  { top: -100%; } /* 上移一整卡，显示字形下半 */
 
-  /* 翻页动片（省电：常驻渲染但透明，配合 will-change 让合成层常驻，
-     避免每秒一次的层创建/销毁；隐藏视图 display:none 无层，不受影响） */
+  /* 翻页动片：只在翻页动画进行的 ~500ms 内存在（goA/goB 类挂上才显示），
+     待机时 display:none 完全不进合成树。
+     这是 iPadOS 锁屏裁切的结构性修复：此前翻页片常驻合成层（opacity:0 + will-change），
+     秒卡每秒刷新层内容，锁屏时 iOS 丢弃/损坏的正是这些最活跃的层瓦片，
+     解锁后 Safari 误以为层内容没变而沿用坏瓦片 → 只有秒卡被裁。
+     改为瞬态层后，任何损坏的层都会在 1 秒内随动画结束被销毁重建，无法存活。 */
   .flap {
     position: absolute;
     left: 0;
@@ -124,13 +128,14 @@
     overflow: hidden;
     background: -webkit-linear-gradient(top, #303036 0%, #1e1e22 100%);
     background: linear-gradient(180deg, #303036 0%, #1e1e22 100%);
+    display: none;
+    pointer-events: none;   /* 保险：翻页过程中也绝不拦截点击 */
+  }
+  .card.goA .flap, .card.goB .flap {
     display: block;
-    opacity: 0;
-    pointer-events: none;   /* 常驻渲染但透明：绝不拦截点击（番茄钟/角标的点击区域在卡片上） */
     -webkit-will-change: transform;
     will-change: transform;
   }
-  .card.goA .flap, .card.goB .flap { opacity: 1; }
   .flap.front {
     top: 0;
     z-index: 3;
@@ -695,8 +700,16 @@
         回到前台再重启，时间照读系统时钟，天然准确
      3. 只有当前视图的计时体做带动画渲染，隐藏视图静默更新 */
   var mainTimer = null;
+  var lastLoopAt = Date.now();
 
   function loopTick() {
+    /* 挂起看门狗：主屏幕模式下锁屏/解锁可能不触发 visibilitychange，
+       但系统挂起 JS 后定时器必然迟到——实际间隔超过 3 秒即视为经历了一次挂起，
+       无论事件是否送达都强制全量重绘，保证裁切修复零漏网 */
+    var now = Date.now();
+    if (now - lastLoopAt > 3000) { repaintKick(); }
+    lastLoopAt = now;
+
     tick(currentView === 'clock');
     pomoTick(currentView === 'pomo');
     cdTick(currentView === 'countdown');
@@ -704,7 +717,7 @@
   }
 
   function startLoop() {
-    if (mainTimer === null) { mainTimer = setTimeout(loopTick, 20); }
+    if (mainTimer === null) { lastLoopAt = Date.now(); mainTimer = setTimeout(loopTick, 20); }
   }
 
   function stopLoop() {
