@@ -379,6 +379,7 @@
   var cH = document.getElementById('cH');
   var cM = document.getElementById('cM');
   var cS = document.getElementById('cS');
+  var cdState = document.getElementById('cdState');
   var pomoBtn = document.getElementById('pomoBtn');
   var h1Btn = document.getElementById('h1Btn');
   var h2Btn = document.getElementById('h2Btn');
@@ -531,7 +532,8 @@
     var ss = totalSec % 60;
     setCard(pMin, (mm < 10 ? '0' : '') + mm, animate);
     setCard(pSec, (ss < 10 ? '0' : '') + ss, animate);
-    var st = (pomo.mode === 'focus' ? '专注' : '休息');
+    /* 走时中只显示段名保持简洁；暂停时追加「已暂停」提示，防止误以为没在走 */
+    var st = (pomo.mode === 'focus' ? '专注' : '休息') + (pomo.running ? '' : ' · 已暂停');
     if (pomoState.textContent !== st) { pomoState.textContent = st; }   /* 没变就不写 DOM */
   }
 
@@ -584,6 +586,10 @@
     setCard(cH, (hh < 10 ? '0' : '') + hh, animate);
     setCard(cM, (mm < 10 ? '0' : '') + mm, animate);
     setCard(cS, (ss < 10 ? '0' : '') + ss, animate);
+    /* 走时中只显示「倒计时」保持简洁；暂停/结束状态在标题处轻提醒 */
+    var st = '倒计时';
+    if (!cd.running) { st = (cd.remain <= 0 ? '倒计时 · 已结束' : '倒计时 · 已暂停'); }
+    if (cdState.textContent !== st) { cdState.textContent = st; }
   }
 
   function cdTick(animate) {
