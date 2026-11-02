@@ -131,10 +131,20 @@
     display: none;
     pointer-events: none;   /* 保险：翻页过程中也绝不拦截点击 */
   }
-  .card.goA .flap, .card.goB .flap {
+  /* 省电决策（视觉零差异）：
+     - will-change 只给"立即开跑"的前片：保证 t=0 已提升合成层；
+     - 后片动画延迟 250ms 且从 scaleY(0)（不可见）起步，靠动画启动时自动提升，
+       晚一两帧也无感知——省下前 250ms 的层驻留；
+     - 后片静态样式也是 scaleY(0)，与 backwards fill 的 from 帧互为双保险：
+       个别 WebKit 版本在延迟期对 fill 值有解析怪癖（实测 Chromium 会间歇性
+       回退到静态/误用结束帧），两层防护都指向"不可见"，任何路径都不会闪现。 */
+  .card.goA .flap.front, .card.goB .flap.front {
     display: block;
     -webkit-will-change: transform;
     will-change: transform;
+  }
+  .card.goA .flap.back, .card.goB .flap.back {
+    display: block;
   }
   .flap.front {
     top: 0;
@@ -146,6 +156,10 @@
   .flap.back {
     bottom: 0;
     z-index: 2;
+    /* 静态压扁：延迟期（前 250ms）无需动画 backwards fill 也保持不可见，
+       合成层只在真正动画的 250ms 内存在 */
+    -webkit-transform: scaleY(0);
+    transform: scaleY(0);
     background: -webkit-linear-gradient(top, #232327 0%, #1a1a1e 100%);
     background: linear-gradient(180deg, #232327 0%, #1a1a1e 100%);
     box-shadow: inset 0 1px 0 rgba(0,0,0,0.9);
@@ -467,12 +481,21 @@
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', function () { setTimeout(layout, 300); });
 
-  /* ---------- 单卡翻页 ---------- */
+  /* ---------- 单卡翻页 ----------
+     省电：四张数字片的引用缓存在 card._refs 上。翻页每秒发生，
+     若每次都 querySelector，仅秒卡就产生 4 次/秒的 DOM 树查询 × 时钟+番茄+倒计时
+     共 8 张卡——全部省掉。 */
   function setCard(card, val, animate) {
-    var upper = card.querySelector('.upper span');
-    var lower = card.querySelector('.lower span');
-    var front = card.querySelector('.flap.front span');
-    var back  = card.querySelector('.flap.back span');
+    var refs = card._refs;
+    if (!refs) {
+      refs = card._refs = {
+        upper: card.querySelector('.upper span'),
+        lower: card.querySelector('.lower span'),
+        front: card.querySelector('.flap.front span'),
+        back:  card.querySelector('.flap.back span')
+      };
+    }
+    var upper = refs.upper, lower = refs.lower, front = refs.front, back = refs.back;
     var old = card.getAttribute('data-v');
 
     /* 上一次翻页还没收尾（动画进行中又有新写入）：
@@ -698,6 +721,7 @@
     h1Btn.style.opacity = cdOn1 ? '0.5' : '';
     h2Btn.style.opacity = cdOn2 ? '0.5' : '';
 
+    if (v === 'clock') { tick(false); }      /* 回到时钟：隐藏期间未更新，直接对齐当前值 */
     if (v === 'pomo') { pomoRender(true); }
     if (v === 'countdown') { cdRender(true); }
   }
@@ -739,7 +763,9 @@
         每次唤醒都落在秒变化的瞬间，绝不空转，数字永远及时
      2. 页面隐藏（熄屏/切后台）时彻底清除定时器，JS 完全休眠；
         回到前台再重启，时间照读系统时钟，天然准确
-     3. 只有当前视图的计时体做带动画渲染，隐藏视图静默更新 */
+     3. 每秒只更新当前视图的计时体：隐藏视图零 DOM 写入
+        （切换视图时 showView 会立即补齐到当前值，精确性不受影响——
+        番茄钟/倒计时走的是绝对时间戳 endAt，不靠每秒渲染维持准确性） */
   var mainTimer = null;
   var lastLoopAt = Date.now();
 
@@ -751,9 +777,13 @@
     if (now - lastLoopAt > 3000) { repaintKick(); }
     lastLoopAt = now;
 
-    tick(currentView === 'clock');
-    pomoTick(currentView === 'pomo');
-    cdTick(currentView === 'countdown');
+    if (currentView === 'clock') {
+      tick(true);
+    } else if (currentView === 'pomo') {
+      pomoTick(true);
+    } else {
+      cdTick(true);
+    }
     mainTimer = setTimeout(loopTick, 1020 - (Date.now() % 1000));
   }
 
@@ -811,22 +841,33 @@
         比持续播放省电得多（视频解码时间仅占 0.25%）
      C) 以上都不生效时：请到 设置-显示与亮度-自动锁定 选择最长档位配合 */
   var WAKE_VIDEO = 'data:video/mp4;base64,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';
-  var wakeVideo = document.createElement('video');
-  wakeVideo.muted = true;
-  wakeVideo.setAttribute('playsinline', '');
-  wakeVideo.setAttribute('webkit-playsinline', '');
-  wakeVideo.setAttribute('preload', 'auto');
-  wakeVideo.style.cssText = 'position:fixed;left:0;bottom:0;width:16px;height:16px;opacity:0.001;pointer-events:none;z-index:-1;';
-  wakeVideo.src = WAKE_VIDEO;
-  document.body.appendChild(wakeVideo);
+  var wakeVideo = null;   /* 懒创建：只有真正需要媒体脉冲时才把 <video> 挂进 DOM，
+                             Wake Lock 可用的系统上可能永远不需要它 */
+
+  function ensureWakeVideo() {
+    if (wakeVideo) { return wakeVideo; }
+    var v = document.createElement('video');
+    v.muted = true;
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    v.setAttribute('preload', 'none');   /* 冷启动：不预载，play() 时才加载（data URI 秒解） */
+    v.style.cssText = 'position:fixed;left:0;bottom:0;width:16px;height:16px;opacity:0.001;pointer-events:none;z-index:-1;';
+    v.src = WAKE_VIDEO;
+    document.body.appendChild(v);
+    wakeVideo = v;
+    return v;
+  }
 
   function videoPulse() {
-    if (document.hidden) { return; }
+    /* Wake Lock 已生效时媒体脉冲纯属浪费（解码管线唤醒一次的功耗远大于
+       一个已经持有的系统锁），直接跳过；老系统（无 Wake Lock API）才走脉冲 */
+    if (document.hidden || wakeLockObj) { return; }
+    var v = ensureWakeVideo();
     try {
-      wakeVideo.currentTime = 0;
-      var p = wakeVideo.play();
+      v.currentTime = 0;
+      var p = v.play();
       if (p && p.catch) { p.catch(function () {}); }   /* 不支持时静默降级 */
-      setTimeout(function () { try { wakeVideo.pause(); } catch (e) {} }, 1500);
+      setTimeout(function () { try { v.pause(); } catch (e) {} }, 1500);
     } catch (e) { /* 同上 */ }
   }
 
@@ -841,20 +882,31 @@
     }).catch(function () {});
   }
 
-  setInterval(videoPulse, 10 * 60 * 1000);   /* 每 10 分钟续一次息屏倒计时 */
+  /* 脉冲定时器随页面可见性起停：隐藏期间一个多余的定时器唤醒都不留 */
+  var pulseTimer = null;
+  function startPulse() {
+    if (pulseTimer === null) { pulseTimer = setInterval(videoPulse, 10 * 60 * 1000); }
+  }
+  function stopPulse() {
+    if (pulseTimer !== null) { clearInterval(pulseTimer); pulseTimer = null; }
+  }
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       stopLoop();
+      stopPulse();
     } else {
       startLoop();
       repaintKick();      /* 修复锁屏回来卡片局部被裁切 */
-      requestWakeLock();  /* 回前台重新申请 Wake Lock */
-      videoPulse();       /* 顺手把息屏倒计时也续上 */
+      requestWakeLock();  /* 回前台重新申请 Wake Lock（异步） */
+      /* 延迟 1.5s 再考虑脉冲：给 Wake Lock 申请留出时间，
+         成功则脉冲被跳过，失败（老系统）才播放续命 */
+      setTimeout(videoPulse, 1500);
     }
   });
   window.addEventListener('pageshow', repaintKick);   /* 从后台整页恢复时同样踢一脚 */
   startLoop();
+  startPulse();
 
   /* 初始化（首帧直接就位，不翻页） */
   tick(false);
