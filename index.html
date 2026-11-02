@@ -711,28 +711,38 @@
   /* ---------- 锁屏回前台的重绘修复 ----------
      iPadOS Safari 锁屏时会丢弃卡片的合成层瓦片，回来后拿旧瓦片凑合显示，
      卡片局部（如秒卡右侧）被裁切；旋转屏幕能恢复正是因为触发了重排重绘。
-     这里在回到前台时主动"踢一脚"：给卡片和翻页片短暂施加 translateZ(0)
-     强制重建合成层与瓦片，效果等同旋转屏幕但无任何可见扰动。 */
+     实测轻量踢法（translateZ(0)）对已存在的合成层是空操作，Safari 不会重建瓦片。
+     所以这里用两段式强制重绘：
+     第一段：body display:none -> 强制 reflow -> 恢复，整个渲染树拆除重建，
+             这是 iOS 上唯一保证全量重绘的方式（刚好从锁屏回来，一帧黑屏无感知）；
+     第二段：400ms 后对卡片和翻页片做「销毁合成层再重建」兜底 Safari 的延迟重建。 */
   function repaintKick() {
-    var ids = ['hourCard', 'minuteCard', 'secondCard', 'pMin', 'pSec', 'cH', 'cM', 'cS'];
-    var els = [document.body];
-    for (var i = 0; i < ids.length; i++) {
-      var card = document.getElementById(ids[i]);
-      if (!card) { continue; }
-      els.push(card);
-      var flaps = card.querySelectorAll('.flap');
-      for (var j = 0; j < flaps.length; j++) { els.push(flaps[j]); }
-    }
-    for (var k = 0; k < els.length; k++) {
-      els[k].style.webkitTransform = 'translateZ(0)';
-      els[k].style.transform = 'translateZ(0)';
-    }
+    var b = document.body;
+    b.style.display = 'none';
+    void b.offsetHeight;          /* 强制同步 reflow，渲染树整体重建 */
+    b.style.display = '';
+
     setTimeout(function () {
-      for (var k = 0; k < els.length; k++) {
-        els[k].style.webkitTransform = '';
-        els[k].style.transform = '';
+      var ids = ['hourCard', 'minuteCard', 'secondCard', 'pMin', 'pSec', 'cH', 'cM', 'cS'];
+      var els = [document.body];
+      for (var i = 0; i < ids.length; i++) {
+        var card = document.getElementById(ids[i]);
+        if (!card) { continue; }
+        els.push(card);
+        var flaps = card.querySelectorAll('.flap');
+        for (var j = 0; j < flaps.length; j++) { els.push(flaps[j]); }
       }
-    }, 80);
+      for (var k = 0; k < els.length; k++) {
+        els[k].style.webkitTransform = 'translateZ(0)';
+        els[k].style.transform = 'translateZ(0)';
+      }
+      setTimeout(function () {
+        for (var k2 = 0; k2 < els.length; k2++) {
+          els[k2].style.webkitTransform = '';
+          els[k2].style.transform = '';
+        }
+      }, 80);
+    }, 400);
   }
 
   /* ---------- 屏幕常亮（三层策略，按系统自动降级，全部零可见痕迹） ----------
