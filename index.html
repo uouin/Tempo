@@ -702,9 +702,85 @@
     if (mainTimer !== null) { clearTimeout(mainTimer); mainTimer = null; }
   }
 
+  /* ---------- 锁屏回前台的重绘修复 ----------
+     iPadOS Safari 锁屏时会丢弃卡片的合成层瓦片，回来后拿旧瓦片凑合显示，
+     卡片局部（如秒卡右侧）被裁切；旋转屏幕能恢复正是因为触发了重排重绘。
+     这里在回到前台时主动"踢一脚"：给卡片和翻页片短暂施加 translateZ(0)
+     强制重建合成层与瓦片，效果等同旋转屏幕但无任何可见扰动。 */
+  function repaintKick() {
+    var ids = ['hourCard', 'minuteCard', 'secondCard', 'pMin', 'pSec', 'cH', 'cM', 'cS'];
+    var els = [document.body];
+    for (var i = 0; i < ids.length; i++) {
+      var card = document.getElementById(ids[i]);
+      if (!card) { continue; }
+      els.push(card);
+      var flaps = card.querySelectorAll('.flap');
+      for (var j = 0; j < flaps.length; j++) { els.push(flaps[j]); }
+    }
+    for (var k = 0; k < els.length; k++) {
+      els[k].style.webkitTransform = 'translateZ(0)';
+      els[k].style.transform = 'translateZ(0)';
+    }
+    setTimeout(function () {
+      for (var k = 0; k < els.length; k++) {
+        els[k].style.webkitTransform = '';
+        els[k].style.transform = '';
+      }
+    }, 80);
+  }
+
+  /* ---------- 屏幕常亮（三层策略，按系统自动降级，全部零可见痕迹） ----------
+     A) iPadOS 16.4+：官方 Wake Lock API 申请屏幕常亮，零额外开销；
+        系统会在切后台时自动释放，回前台重新申请
+     B) 老系统兜底：每 10 分钟播放一次 1.5 秒的无声小视频（1.6KB 内嵌）。
+        iOS 的息屏倒计时会在媒体播放结束时重新计时——
+        每 10 分钟"续一口气"，30 分钟的倒计时永远走不到头 → 永不息屏，
+        比持续播放省电得多（视频解码时间仅占 0.25%）
+     C) 以上都不生效时：请到 设置-显示与亮度-自动锁定 选择最长档位配合 */
+  var WAKE_VIDEO = 'data:video/mp4;base64,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';
+  var wakeVideo = document.createElement('video');
+  wakeVideo.muted = true;
+  wakeVideo.setAttribute('playsinline', '');
+  wakeVideo.setAttribute('webkit-playsinline', '');
+  wakeVideo.setAttribute('preload', 'auto');
+  wakeVideo.style.cssText = 'position:fixed;left:0;bottom:0;width:16px;height:16px;opacity:0.001;pointer-events:none;z-index:-1;';
+  wakeVideo.src = WAKE_VIDEO;
+  document.body.appendChild(wakeVideo);
+
+  function videoPulse() {
+    if (document.hidden) { return; }
+    try {
+      wakeVideo.currentTime = 0;
+      var p = wakeVideo.play();
+      if (p && p.catch) { p.catch(function () {}); }   /* 不支持时静默降级 */
+      setTimeout(function () { try { wakeVideo.pause(); } catch (e) {} }, 1500);
+    } catch (e) { /* 同上 */ }
+  }
+
+  var wakeLockObj = null;
+  function requestWakeLock() {
+    if (!navigator.wakeLock || document.hidden || wakeLockObj) { return; }
+    navigator.wakeLock.request('screen').then(function (l) {
+      wakeLockObj = l;
+      if (l.addEventListener) {
+        l.addEventListener('release', function () { wakeLockObj = null; });
+      }
+    }).catch(function () {});
+  }
+
+  setInterval(videoPulse, 10 * 60 * 1000);   /* 每 10 分钟续一次息屏倒计时 */
+
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { stopLoop(); } else { startLoop(); }
+    if (document.hidden) {
+      stopLoop();
+    } else {
+      startLoop();
+      repaintKick();      /* 修复锁屏回来卡片局部被裁切 */
+      requestWakeLock();  /* 回前台重新申请 Wake Lock */
+      videoPulse();       /* 顺手把息屏倒计时也续上 */
+    }
   });
+  window.addEventListener('pageshow', repaintKick);   /* 从后台整页恢复时同样踢一脚 */
   startLoop();
 
   /* 初始化（首帧直接就位，不翻页） */
