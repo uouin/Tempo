@@ -1019,8 +1019,22 @@ s.parentNode.insertBefore(hm, s);
         只执行重置；窗口内没有第二击 → 才真正执行开始/暂停
         （暂停时剩余时间按当下时刻结算，一秒不丢）；
      c) 三击 = 单击 + 双击，行为可预期（例如：暂停后紧跟重置）。 */
-  function trackEvent(category, action, label) {
-    try { (window._hmt = window._hmt || []).push(['_trackEvent', category, action, label]); } catch (e) {}
+  function trackEvent(category, action, label, value) {
+    try {
+      var item = ['_trackEvent', category, action, label];
+      if (value !== undefined) { item.push(value); }
+      (window._hmt = window._hmt || []).push(item);
+    } catch (e) {}
+  }
+
+  var STAY_NAMES = { clock: '时钟', pomo: '番茄钟', countdown: '倒计时', stopwatch: '正计时' };
+  var stayView = 'clock';
+  var stayStart = Date.now();
+
+  function stayFlush() {
+    var sec = Math.round((Date.now() - stayStart) / 1000);
+    stayStart = Date.now();
+    if (sec >= 1) { trackEvent('停留', '时长', STAY_NAMES[stayView] || stayView, sec); }
   }
 
   function bindTapControls(el, onSingle, onDouble, tag) {
@@ -1344,6 +1358,8 @@ s.parentNode.insertBefore(hm, s);
   var currentView = 'clock';
 
   function showView(v) {
+    stayFlush();
+    stayView = v;
     currentView = v;
     clockView.style.display = v === 'clock' ? 'flex' : 'none';
     pomoView.style.display = v === 'pomo' ? 'flex' : 'none';
@@ -1523,14 +1539,17 @@ s.parentNode.insertBefore(hm, s);
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
+      stayFlush();
       stopLoop();
     } else {
+      stayStart = Date.now();
       startLoop();
       repaintKick();      /* 修复锁屏回来卡片局部被裁切 */
       requestWakeLock();  /* 回前台重新申请 Wake Lock */
       videoPulse();       /* 顺手把息屏倒计时也续上 */
     }
   });
+  window.addEventListener('pagehide', stayFlush);
   window.addEventListener('pageshow', repaintKick);   /* 从后台整页恢复时同样踢一脚 */
   startLoop();
 
