@@ -261,7 +261,8 @@
     justify-content: center;
   }
   #pomoState,
-  #cdState {
+  #cdState,
+  #swState {
     color: #fff;
     opacity: 0.4;
     font-size: 16px;
@@ -270,7 +271,8 @@
     margin-bottom: 26px;
   }
   #pomoHint,
-  #cdHint {
+  #cdHint,
+  #swHint {
     color: #fff;
     opacity: 0.18;
     font-size: 13px;
@@ -289,6 +291,125 @@
     padding: 14px;
     margin: -14px;
   }
+
+  /*
+    正计时视图（省电设计）：
+    - 未点计次：时分秒铺满整屏（与倒计时观感一致）
+    - 点计次：主界面用 transform scale(0.75) 缩到 3/4（合成器动画，零重排），
+      侧边栏 translateX 划入右侧 1/4（同样只动 transform，不触发 layout）
+    - 动画只在展开/收起的 0.3s 内存在，待机时不进合成树
+  */
+  #swView {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+  }
+  #swMain {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    -webkit-transform-origin: left center;
+    transform-origin: left center;
+    -webkit-transition: -webkit-transform 0.3s ease;
+    transition: transform 0.3s ease;
+  }
+  #swView.side #swMain {
+    -webkit-transform: scale(0.75);
+    transform: scale(0.75);
+  }
+  #swSide {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 25%;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    background: rgba(255,255,255,0.035);
+    border-left: 1px solid rgba(255,255,255,0.07);
+    -webkit-transform: translateX(103%);
+    transform: translateX(103%);
+    opacity: 0;
+    pointer-events: none;   /* 收起状态下不可点击 */
+    -webkit-transition: -webkit-transform 0.3s ease, opacity 0.3s ease;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  #swView.side #swSide {
+    -webkit-transform: translateX(0);
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #swSideHead {
+    -webkit-flex: none;
+    flex: none;
+    color: #fff;
+    opacity: 0.4;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    padding: 14px 14px 8px;
+  }
+  #swLaps {
+    -webkit-flex: 1;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .lap-row {
+    padding: 9px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .lap-idx {
+    color: #fff;
+    opacity: 0.3;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+  }
+  .lap-total {
+    color: #fff;
+    opacity: 0.85;
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+  }
+  .lap-delta {
+    color: #fff;
+    opacity: 0.35;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+  }
+  /* 计次悬浮按钮：右下角，风格与左上角模式按钮一致（很淡，不抢视觉） */
+  #lapBtn {
+    position: fixed;
+    right: 16px;
+    bottom: 20px;
+    z-index: 30;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 999px;
+    color: #fff;
+    opacity: 0.45;
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 10px 20px;
+    margin: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
 </style>
 </head>
 <body data-page-node-id="PHVwJtksViCUClyicGFO7w">
@@ -296,6 +417,7 @@
     <button class="mode-btn" id="pomoBtn" type="button">番茄钟</button>
     <button class="mode-btn" id="h1Btn" type="button">一小时</button>
     <button class="mode-btn" id="h2Btn" type="button">两小时</button>
+    <button class="mode-btn" id="swBtn" type="button">正计时</button>
   </div>
 
   <div class="clock" id="clockView" data-page-node-id="ppMXjZKmxePg6Dds4MVfBY">
@@ -364,6 +486,39 @@
     <div id="cdHint">轻点开始 / 暂停 · 双击重置</div>
   </div>
 
+  <!-- 正计时视图：左侧时分秒（点计次后缩放至 3/4），右侧 1/4 计次侧边栏，右下角悬浮计次按钮 -->
+  <div id="swView" style="display:none">
+    <div id="swMain">
+      <div id="swState">正计时</div>
+      <div class="clock" id="swCards">
+        <div class="card" id="swH">
+          <div class="half upper"><span>00</span></div>
+          <div class="half lower"><span>00</span></div>
+          <div class="flap front"><span></span></div>
+          <div class="flap back"><span></span></div>
+        </div>
+        <div class="card" id="swM">
+          <div class="half upper"><span>00</span></div>
+          <div class="half lower"><span>00</span></div>
+          <div class="flap front"><span></span></div>
+          <div class="flap back"><span></span></div>
+        </div>
+        <div class="card" id="swS">
+          <div class="half upper"><span>00</span></div>
+          <div class="half lower"><span>00</span></div>
+          <div class="flap front"><span></span></div>
+          <div class="flap back"><span></span></div>
+        </div>
+      </div>
+      <div id="swHint">轻点开始 / 暂停 · 双击重置</div>
+    </div>
+    <div id="swSide">
+      <div id="swSideHead">计次</div>
+      <div id="swLaps"></div>
+    </div>
+    <button id="lapBtn" type="button">计次</button>
+  </div>
+
 <script>
 (function () {
   'use strict';
@@ -391,6 +546,18 @@
   var pomoBtn = document.getElementById('pomoBtn');
   var h1Btn = document.getElementById('h1Btn');
   var h2Btn = document.getElementById('h2Btn');
+  var swBtn = document.getElementById('swBtn');
+
+  /* 正计时视图元素 */
+  var swView = document.getElementById('swView');
+  var swCards = document.getElementById('swCards');
+  var swH = document.getElementById('swH');
+  var swM = document.getElementById('swM');
+  var swS = document.getElementById('swS');
+  var swState = document.getElementById('swState');
+  var swSideHead = document.getElementById('swSideHead');
+  var swLaps = document.getElementById('swLaps');
+  var lapBtn = document.getElementById('lapBtn');
 
   /* ---------- 布局：JS 按屏幕像素计算，写入内联样式（不依赖 calc/变量/vmin） ---------- */
   function applyCard(card, w, h, fs) {
@@ -461,6 +628,13 @@
     applyCard(cH, cW, cHh, bd * 0.75);
     applyCard(cM, cW, cHh, bd * 0.75);
     applyCard(cS, cW, cHh, bd * 0.75);
+
+    /* 正计时视图（与倒计时同尺寸；点计次后的 3/4 缩放走 transform，不参与布局计算） */
+    swM.style.marginLeft = (bd * GAP) + 'px';
+    swS.style.marginLeft = (bd * GAP) + 'px';
+    applyCard(swH, cW, cHh, bd * 0.75);
+    applyCard(swM, cW, cHh, bd * 0.75);
+    applyCard(swS, cW, cHh, bd * 0.75);
   }
 
   layout();
@@ -678,7 +852,100 @@
     }
   );
 
-  /* ---------- 视图切换（时钟 / 番茄钟 / 倒计时），互不干扰 ----------
+  /* ---------- 正计时（秒表）+ 计次 ----------
+     时间戳走时（Date.now 差值，零漂移）；计次列表只在点击时写一次 DOM；
+     侧边栏展开用 transform 动画，待机时零渲染开销 */
+  var SW_MAX_LAPS = 300;
+  var sw = { running: false, startAt: 0, elapsed: 0, laps: [] };
+
+  function swNow() {
+    return sw.running ? (Date.now() - sw.startAt) : sw.elapsed;
+  }
+
+  function swRender(animate) {
+    var totalSec = Math.floor(swNow() / 1000);
+    var hh = Math.floor(totalSec / 3600);
+    var mm = Math.floor((totalSec % 3600) / 60);
+    var ss = totalSec % 60;
+    setCard(swH, (hh < 10 ? '0' : '') + hh, animate);
+    setCard(swM, (mm < 10 ? '0' : '') + mm, animate);
+    setCard(swS, (ss < 10 ? '0' : '') + ss, animate);
+    /* 走时中只显示「正计时」；未开始不提示，暂停后才追加提示 */
+    var st = '正计时';
+    if (!sw.running && sw.elapsed > 0) { st = '正计时 · 已暂停'; }
+    if (swState.textContent !== st) { swState.textContent = st; }
+  }
+
+  function swTick(animate) {
+    if (!sw.running) { return; }
+    swRender(animate !== false);
+  }
+
+  /* 计次记录格式：总时长 + 与上一次点击的间隔（首次间隔记 0） */
+  function fmtDur(ms) {
+    var s = Math.floor(ms / 1000);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var ss = s % 60;
+    var out = [];
+    if (h > 0) { out.push(h + ' h'); }
+    if (h > 0 || m > 0) { out.push(m + ' min'); }
+    out.push(ss + ' 秒');
+    return out.join(' ');
+  }
+
+  function updateLapHead() {
+    var t = '计次';
+    if (sw.laps.length > 0) { t += ' · ' + sw.laps.length + '/' + SW_MAX_LAPS; }
+    if (swSideHead.textContent !== t) { swSideHead.textContent = t; }
+  }
+
+  function pushLap() {
+    if (sw.laps.length >= SW_MAX_LAPS) { return; }   /* 上限 300 次 */
+    var t = swNow();
+    if (t <= 0) { return; }   /* 还没开始计时：不记录 */
+    var prev = sw.laps.length ? sw.laps[sw.laps.length - 1].t : 0;
+    var n = sw.laps.push({ t: t, d: t - prev });
+    swView.classList.add('side');   /* 首次计次即展开侧边栏（已展开则保持） */
+    /* 新记录插到最上面，最新的计次永远第一眼可见；每次点击只写一次 DOM */
+    swLaps.insertAdjacentHTML('afterbegin',
+      '<div class="lap-row">' +
+        '<div class="lap-idx">#' + n + '</div>' +
+        '<div class="lap-total">' + fmtDur(t) + '</div>' +
+        '<div class="lap-delta">间隔 ' + fmtDur(t - prev) + '</div>' +
+      '</div>');
+    updateLapHead();
+    if (sw.laps.length >= SW_MAX_LAPS) { lapBtn.style.opacity = '0.2'; }   /* 达上限后按钮变淡示意 */
+  }
+
+  lapBtn.addEventListener('click', pushLap);
+
+  /* 正计时：轻点开始 / 暂停，双击重置（清计次 + 侧边栏收回 + 时分秒回全屏） */
+  bindTapControls(
+    swCards,
+    function () {
+      if (sw.running) {
+        sw.elapsed = Date.now() - sw.startAt;
+        sw.running = false;
+      } else {
+        sw.startAt = Date.now() - sw.elapsed;
+        sw.running = true;
+      }
+      swRender(true);
+    },
+    function () {
+      sw.running = false;
+      sw.elapsed = 0;
+      sw.laps.length = 0;
+      swLaps.innerHTML = '';
+      swView.classList.remove('side');
+      lapBtn.style.opacity = '';
+      updateLapHead();
+      swRender(false);
+    }
+  );
+
+  /* ---------- 视图切换（时钟 / 番茄钟 / 倒计时 / 正计时），互不干扰 ----------
      点非激活按钮 = 进入对应模式；点当前激活的按钮 = 回到时钟 */
   var currentView = 'clock';
 
@@ -687,19 +954,24 @@
     clockView.style.display = v === 'clock' ? 'flex' : 'none';
     pomoView.style.display = v === 'pomo' ? 'flex' : 'none';
     cdView.style.display = v === 'countdown' ? 'flex' : 'none';
+    swView.style.display = v === 'stopwatch' ? 'block' : 'none';
 
     var cdOn1 = v === 'countdown' && cd.total === H1;
     var cdOn2 = v === 'countdown' && cd.total === H2;
+    var swOn = v === 'stopwatch';
     pomoBtn.textContent = v === 'pomo' ? '时钟' : '番茄钟';
     h1Btn.textContent = cdOn1 ? '时钟' : '一小时';
     h2Btn.textContent = cdOn2 ? '时钟' : '两小时';
+    swBtn.textContent = swOn ? '时钟' : '正计时';
     /* 激活项略亮，其余保持很淡 */
     pomoBtn.style.opacity = v === 'pomo' ? '0.5' : '';
     h1Btn.style.opacity = cdOn1 ? '0.5' : '';
     h2Btn.style.opacity = cdOn2 ? '0.5' : '';
+    swBtn.style.opacity = swOn ? '0.5' : '';
 
     if (v === 'pomo') { pomoRender(true); }
     if (v === 'countdown') { cdRender(true); }
+    if (swOn) { swRender(true); }
   }
 
   pomoBtn.addEventListener('click', function () {
@@ -714,6 +986,9 @@
     if (currentView === 'countdown' && cd.total === H2) { showView('clock'); return; }
     cdStart(H2);
     showView('countdown');
+  });
+  swBtn.addEventListener('click', function () {
+    showView(currentView === 'stopwatch' ? 'clock' : 'stopwatch');
   });
 
   /* ---------- 时间维护：直接读系统时间（Date.now() 即本地时间，零漂移） ---------- */
@@ -754,6 +1029,7 @@
     tick(currentView === 'clock');
     pomoTick(currentView === 'pomo');
     cdTick(currentView === 'countdown');
+    swTick(currentView === 'stopwatch');
     mainTimer = setTimeout(loopTick, 1020 - (Date.now() % 1000));
   }
 
@@ -780,7 +1056,7 @@
     b.style.display = '';
 
     setTimeout(function () {
-      var ids = ['hourCard', 'minuteCard', 'secondCard', 'pMin', 'pSec', 'cH', 'cM', 'cS'];
+      var ids = ['hourCard', 'minuteCard', 'secondCard', 'pMin', 'pSec', 'cH', 'cM', 'cS', 'swH', 'swM', 'swS'];
       var els = [document.body];
       for (var i = 0; i < ids.length; i++) {
         var card = document.getElementById(ids[i]);
@@ -860,6 +1136,7 @@
   tick(false);
   pomoRender(false);
   cdRender(false);
+  swRender(false);
 
   /* 轻点屏幕尝试进入全屏（iPadOS 16.4+ 有效；iPadOS 14 Safari 不支持元素全屏，
      请用「添加到主屏幕」方式获得全屏，见 meta 配置） */
@@ -873,8 +1150,12 @@
 
   /* 屏蔽 iOS 的滚动回弹（双击缩放已由 CSS touch-action: manipulation 禁用；
      注意不要在 touchend 上 preventDefault——iOS 会因此吞掉第二次轻点的 click，
-     导致番茄钟「双击重置」失效） */
-  document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+     导致番茄钟「双击重置」失效；
+     唯一例外：计次侧边栏列表允许原生上下滚动，其他区域仍全部拦截） */
+  document.addEventListener('touchmove', function (e) {
+    if (swLaps && swLaps.contains(e.target)) { return; }
+    e.preventDefault();
+  }, { passive: false });
 })();
 </script>
 </body>
