@@ -519,10 +519,13 @@
   }
   /* 小屏横屏（compact）：标题移到右上角与按钮条同高（居中会与按钮重叠），
      底部提示居中并与计次按钮垂直对齐；
-     卡片居中于标题栏与提示栏之间，上下留白避免与按钮/提示挤在一起 */
-  #swView.compact {
+     卡片容器上下留白对称于「标题底~提示顶」视觉带：带中心在 h/2-5.5，
+     卡组中心 = (44 + h-55)/2 = h/2-5.5，精确对齐（55 = 44 + 11） */
+  #swView.compact,
+  #pomoView.compact,
+  #cdView.compact {
     padding-top: 44px;
-    padding-bottom: 78px;
+    padding-bottom: 55px;
   }
   #swView.compact #swState {
     position: absolute;
@@ -782,7 +785,7 @@
       b = Math.min(w * 0.94 / 3.56, (h - 110) / 1.4);    /* 时钟：无标题/提示，上下各留 55px */
       bp = Math.min(w * 0.94 / 2.48, (h - 132) / 1.4);   /* 番茄钟：标题/提示 compact 下走绝对定位 */
       bd = Math.min(w * 0.94 / 3.76, (h - 132) / 1.4);   /* 倒计时：同上 */
-      bsw = Math.min(w * 0.9 / 3.56, (h - 128) / 1.4);   /* 正计时 */
+      bsw = Math.min(w * 0.9 / 3.56, (h - 145) / 1.4);   /* 正计时：额外让开右下角计次按钮高度 */
     }
 
     /* 时钟视图 */
