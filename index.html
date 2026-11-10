@@ -334,11 +334,13 @@
     -webkit-transform-origin: center top;
     transform-origin: center top;
   }
-  #swView.side #swMain {
+  /* 只有横屏展开侧栏才缩放主区域（竖屏底栏从底部升起、不挤占卡片区域，
+     卡片保持全尺寸不缩放） */
+  #swView.side:not(.portrait) #swMain {
     -webkit-transform: scale(0.75);
     transform: scale(0.75);
   }
-  #swView.wide.side #swMain {
+  #swView.wide.side:not(.portrait) #swMain {
     -webkit-transform: scale(0.8);
     transform: scale(0.8);
   }
@@ -386,9 +388,12 @@
   }
   /* 竖屏展开底栏时提示小字让位：底栏上方是计次按钮活动区，
      且提示会被底栏盖住，淡出避免重叠（纯 opacity，无重排） */
+  /* 标题/提示位置变化（侧栏开合导致 right/left/width 变化）加过渡，
+     与卡片缩放同步 0.3s，展开/收起全程丝滑不跳变 */
+  #swState,
   #swHint {
-    -webkit-transition: opacity 0.3s ease;
-    transition: opacity 0.3s ease;
+    -webkit-transition: opacity 0.3s ease, left 0.3s ease, right 0.3s ease, width 0.3s ease;
+    transition: opacity 0.3s ease, left 0.3s ease, right 0.3s ease, width 0.3s ease;
   }
   #swView.portrait.side #swHint {
     opacity: 0;
@@ -512,10 +517,12 @@
     -webkit-transition: bottom 0.3s ease;
     transition: bottom 0.3s ease;   /* 竖屏展开/收起底栏时按钮位置平滑移动 */
   }
-  /* 竖屏展开底栏：按钮上移到栏上方（原 JS positionLapBtn 的逻辑改为纯 CSS，
-     底栏高度 35%，跟随侧栏 side 类自动切换，零 JS 开销） */
+  /* 竖屏展开底栏：卡片不缩放（底栏不挤占卡片区域），计次按钮收进底栏
+     头部行右侧（「计次」标题旁），不压卡片也不挡日志列表；
+     bottom 用 35%-44px 表达 = 头部行内，与原 bottom 过渡衔接保持丝滑 */
   #swView.portrait.side #lapBtn {
-    bottom: calc(35% + 14px);
+    bottom: calc(35% - 38px);
+    padding: 8px 18px;
   }
   /* 小屏横屏（compact）：标题移到右上角与按钮条同高（居中会与按钮重叠），
      底部提示居中并与计次按钮垂直对齐；
@@ -529,7 +536,7 @@
   }
   #swView.compact #swState {
     position: absolute;
-    top: 22px;
+    top: 21px;   /* 与模式条按钮文字中心精确对齐（实测 22px 偏低 1px） */
     right: 14px;
     margin-bottom: 0;
   }
@@ -576,7 +583,7 @@
   #pomoView.compact #pomoState,
   #cdView.compact #cdState {
     position: absolute;
-    top: 22px;
+    top: 21px;   /* 与模式条按钮文字中心精确对齐（实测 22px 偏低 1px） */
     right: 14px;
     margin-bottom: 0;
   }
