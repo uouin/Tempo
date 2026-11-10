@@ -504,13 +504,36 @@
     right: 14px;
     margin-bottom: 0;
   }
-  /* 侧栏展开后主区域右缘 = 侧栏左缘：标题贴到其左侧 14px（高度不变，仍与按钮条同高），
-     不会盖到侧栏上，也不会被 scale 推得忽高忽低 */
+  /* 侧栏展开（横屏）时标题/提示相对左侧主区域居中：
+     卡片缩放后居中于左 75%（wide 80%），标题/提示的居中范围与之对齐；
+     竖屏底栏不占宽度，无需处理（:not(.portrait) 排除） */
+  #swView.side:not(.portrait) #swState,
+  #swView.side:not(.portrait) #swHint {
+    width: 75%;
+    text-align: center;
+    -webkit-align-self: flex-start;
+    align-self: flex-start;
+  }
+  #swView.wide.side #swState,
+  #swView.wide.side #swHint {
+    width: 80%;
+  }
+  /* compact（手机横屏）绝对定位版本：同样框定在左侧主区域内居中 */
   #swView.compact.side #swState {
-    right: calc(25% + 14px);
+    left: 0;
+    right: auto;
+    width: 75%;
   }
   #swView.compact.wide.side #swState {
-    right: calc(20% + 14px);
+    width: 80%;
+  }
+  #swView.compact.side #swHint {
+    left: 0;
+    right: auto;
+    width: 75%;
+  }
+  #swView.compact.wide.side #swHint {
+    width: 80%;
   }
   #swView.compact #swHint {
     position: absolute;
