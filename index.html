@@ -521,14 +521,15 @@
   #swView.wide.side #swHint {
     width: 80%;
   }
-  /* compact（手机横屏）绝对定位版本：同样框定在左侧主区域内居中 */
+  /* compact（手机横屏）：标题保持右上角定位习惯，侧栏展开时只是往左
+     平移到主区域右缘（侧栏左侧 14px），不做居中（居中是 iPad/电脑横屏的行为） */
   #swView.compact.side #swState {
-    left: 0;
-    right: auto;
-    width: 75%;
+    left: auto;
+    right: calc(25% + 14px);
+    width: auto;
   }
   #swView.compact.wide.side #swState {
-    width: 80%;
+    right: calc(20% + 14px);
   }
   #swView.compact.side #swHint {
     left: 0;
