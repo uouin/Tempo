@@ -512,6 +512,11 @@
     -webkit-transition: bottom 0.3s ease;
     transition: bottom 0.3s ease;   /* 竖屏展开/收起底栏时按钮位置平滑移动 */
   }
+  /* 竖屏展开底栏：按钮上移到栏上方（原 JS positionLapBtn 的逻辑改为纯 CSS，
+     底栏高度 35%，跟随侧栏 side 类自动切换，零 JS 开销） */
+  #swView.portrait.side #lapBtn {
+    bottom: calc(35% + 14px);
+  }
   /* 小屏横屏（compact）：标题移到右上角与按钮条同高（居中会与按钮重叠），
      底部提示居中并与计次按钮垂直对齐；
      卡片居中于标题栏与提示栏之间，上下留白避免与按钮/提示挤在一起 */
@@ -835,19 +840,6 @@
       pomoView.classList.remove('compact');
       cdView.classList.remove('compact');
     }
-    positionLapBtn();
-  }
-
-  /* 计次悬浮按钮位置：竖屏展开底栏时上移到栏上方，其余情况贴右下角
-     （竖屏未展开时贴底，避免悬在卡片上） */
-  function positionLapBtn() {
-    var w = document.documentElement.clientWidth;
-    var h = document.documentElement.clientHeight;
-    if (h >= w && swView.classList.contains('side')) {
-      lapBtn.style.bottom = Math.round(h * 0.35 + 14) + 'px';
-    } else {
-      lapBtn.style.bottom = '16px';
-    }
   }
 
   layout();
@@ -1137,7 +1129,6 @@
     var prev = sw.laps.length ? sw.laps[sw.laps.length - 1].t : 0;
     var n = sw.laps.push({ t: t, d: t - prev });
     swView.classList.add('side');   /* 首次计次即展开侧边栏（已展开则保持） */
-    positionLapBtn();
     /* 新记录插到最上面，最新的计次永远第一眼可见；每次点击只写一次 DOM */
     swLaps.insertAdjacentHTML('afterbegin',
       '<div class="lap-row">' +
@@ -1176,7 +1167,6 @@
       sw.laps.length = 0;
       swLaps.innerHTML = '';
       swView.classList.remove('side');
-      positionLapBtn();
       swRender(false);   /* started 保持 true：重置后标题显示「已暂停」；计次按钮随 swRender 转为禁用 */
     }
   );
