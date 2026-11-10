@@ -321,6 +321,8 @@
      侧栏展开的 scale 只缩卡片，标题/提示位置恒定 */
   #swMain {
     width: 100%;
+    -webkit-flex: none;
+    flex: none;   /* 空间紧张时不被压缩（卡片高度由 JS 精确计算） */
     display: -webkit-flex;
     display: flex;
     -webkit-justify-content: center;
@@ -517,12 +519,24 @@
     -webkit-transition: bottom 0.3s ease;
     transition: bottom 0.3s ease;   /* 竖屏展开/收起底栏时按钮位置平滑移动 */
   }
-  /* 竖屏展开底栏：卡片不缩放（底栏不挤占卡片区域），计次按钮收进底栏
-     头部行右侧（「计次」标题旁），不压卡片也不挡日志列表；
-     bottom 用 35%-44px 表达 = 头部行内，与原 bottom 过渡衔接保持丝滑 */
+  /* 竖屏展开底栏：卡组在上方 65% 区域内垂直居中。
+     底栏是绝对定位不占 flex 空间，用 ::after 占位 35% 高参与 flex 居中，
+     卡组便自然落在上区中心，底部让出的空间正好给悬浮计次按钮；
+     height 加 0.3s 过渡，展开/收起时卡组上移/回落与底栏划入同步丝滑 */
+  #swView.portrait::after {
+    content: '';
+    -webkit-flex: none;
+    flex: none;
+    height: 0;
+    -webkit-transition: height 0.3s ease;
+    transition: height 0.3s ease;
+  }
+  #swView.portrait.side::after {
+    height: 35%;
+  }
+  /* 竖屏展开底栏：计次按钮悬浮在底栏上方 14px（卡组居中后此区域为空） */
   #swView.portrait.side #lapBtn {
-    bottom: calc(35% - 38px);
-    padding: 8px 18px;
+    bottom: calc(35% + 14px);
   }
   /* 小屏横屏（compact）：标题移到右上角与按钮条同高（居中会与按钮重叠），
      底部提示居中并与计次按钮垂直对齐；
@@ -742,6 +756,7 @@
   var swM = document.getElementById('swM');
   var swS = document.getElementById('swS');
   var swState = document.getElementById('swState');
+  var swHint = document.getElementById('swHint');
   var swLaps = document.getElementById('swLaps');
   var lapBtn = document.getElementById('lapBtn');
 
@@ -1028,6 +1043,10 @@
     var st = '倒计时';
     if (!cd.running) { st = (cd.remain <= 0 ? '倒计时 · 已结束' : '倒计时 · 已暂停'); }
     if (cdState.textContent !== st) { cdState.textContent = st; }
+    /* 提示文案随运行状态切换：走时中提示「暂停」，停止时提示「开始」 */
+    var hint = cd.running ? '单击卡片· 暂停，双击卡片· 重置'
+                          : '单击卡片· 开始，双击卡片· 重置';
+    if (cdHint.textContent !== hint) { cdHint.textContent = hint; }
   }
 
   function cdTick(animate) {
@@ -1099,6 +1118,10 @@
     if (sw.capped) { st = '正计时 · 已达上限'; }
     else if (!sw.running && sw.started) { st = '正计时 · 已暂停'; }
     if (swState.textContent !== st) { swState.textContent = st; }
+    /* 提示文案随运行状态切换：走时中提示「暂停」，停止时提示「开始」 */
+    var hint = sw.running ? '单击卡片· 暂停，双击卡片· 重置'
+                          : '单击卡片· 开始，双击卡片· 重置';
+    if (swHint.textContent !== hint) { swHint.textContent = hint; }
     /* 计次按钮：暂停中 / 达上限时禁用（每秒只做一次布尔比较，无 DOM 写入） */
     var lapOff = !sw.running || sw.laps.length >= SW_MAX_LAPS;
     if (lapBtn.disabled !== lapOff) { lapBtn.disabled = lapOff; }
