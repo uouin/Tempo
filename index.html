@@ -987,9 +987,11 @@
     if (lapBtn.disabled !== lapOff) { lapBtn.disabled = lapOff; }
   }
 
-  function swTick(animate) {
-    if (!sw.running) { return; }
-    swRender(animate !== false);
+  function swTick(current) {
+    /* 省电：未运行或不在当前视图时直接返回，后台每秒零 DOM 写入
+       （时间戳走时不会丢时间，切回视图时 showView 会全量重渲染） */
+    if (!sw.running || !current) { return; }
+    swRender(true);
   }
 
   function swStart() {
