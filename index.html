@@ -394,8 +394,8 @@
      与卡片缩放同步 0.3s，展开/收起全程丝滑不跳变 */
   #swState,
   #swHint {
-    -webkit-transition: opacity 0.3s ease, left 0.3s ease, right 0.3s ease, width 0.3s ease;
-    transition: opacity 0.3s ease, left 0.3s ease, right 0.3s ease, width 0.3s ease;
+    -webkit-transition: opacity 0.3s ease, left 0.3s ease, right 0.3s ease, width 0.3s ease, padding 0.3s ease;
+    transition: opacity 0.3s ease, left 0.3s ease, right 0.3s ease, width 0.3s ease, padding 0.3s ease;
   }
   #swView.portrait.side #swHint {
     opacity: 0;
@@ -554,19 +554,24 @@
     right: 14px;
     margin-bottom: 0;
   }
-  /* 侧栏展开（横屏）时标题/提示相对左侧主区域居中：
-     卡片缩放后居中于左 75%（wide 80%），标题/提示的居中范围与之对齐；
-     竖屏底栏不占宽度，无需处理（:not(.portrait) 排除） */
-  #swView.side:not(.portrait) #swState,
-  #swView.side:not(.portrait) #swHint {
-    width: 75%;
+  /* 非 compact（iPad/电脑横屏）基线：标题/提示全宽文字居中（视觉与自动宽度相同，
+     但为展开态的 padding 偏移提供可过渡的数值端点） */
+  #swView:not(.compact) #swState,
+  #swView:not(.compact) #swHint {
+    width: 100%;
     text-align: center;
-    -webkit-align-self: flex-start;
-    align-self: flex-start;
   }
-  #swView.wide.side #swState,
-  #swView.wide.side #swHint {
-    width: 80%;
+  /* 侧栏展开（横屏）时标题/提示相对左侧主区域居中：
+     用 padding-right 把文字中心推到主区域（75%/wide 80%）中心，
+     padding 是数值属性可平滑过渡（width auto↔百分比、align-self 都无法动画）；
+     竖屏底栏不占宽度（:not(.portrait) 排除），compact 走自己的 width 方案（排除） */
+  #swView.side:not(.portrait):not(.compact) #swState,
+  #swView.side:not(.portrait):not(.compact) #swHint {
+    padding-right: 25%;
+  }
+  #swView.wide.side:not(.portrait):not(.compact) #swState,
+  #swView.wide.side:not(.portrait):not(.compact) #swHint {
+    padding-right: 20%;
   }
   /* compact（手机横屏）：标题保持右上角定位习惯，侧栏展开时只是往左
      平移到主区域右缘（侧栏左侧 14px），不做居中（居中是 iPad/电脑横屏的行为） */
@@ -579,9 +584,7 @@
     right: calc(20% + 14px);
   }
   #swView.compact.side #swHint {
-    left: 0;
-    right: auto;
-    width: 75%;
+    width: 75%;    /* 只变 width（100%→75% 可过渡），right 恒为 auto 避免 auto 端点跳变 */
   }
   #swView.compact.wide.side #swHint {
     width: 80%;
@@ -589,7 +592,9 @@
   #swView.compact #swHint {
     position: absolute;
     bottom: 33px;
-    left: 0; right: 0;
+    left: 0;
+    right: auto;   /* 恒 auto：两端一致才可过渡（right:0↔auto 会跳变） */
+    width: 100%;
     margin-top: 0;
     text-align: center;
   }
