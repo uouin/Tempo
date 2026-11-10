@@ -430,12 +430,16 @@
   .lap-total {
     -webkit-flex: 1;
     flex: 1;
+    min-width: 0;          /* 关键：允许 flex 收缩，窄栏时截断而不是压到右侧文字上 */
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: #fff;
     opacity: 0.85;
     font-size: 14px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    margin-right: 8px;     /* 与右侧间隔文字保持间距 */
   }
   .lap-delta {
     -webkit-flex: none;
@@ -445,6 +449,20 @@
     font-size: 12px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+  /* 横屏侧栏只有屏宽的 20%~25%，文字整体缩小一号 + 行距收紧，避免拥挤 */
+  #swView:not(.portrait) .lap-row {
+    padding: 6px 10px;
+  }
+  #swView:not(.portrait) .lap-idx {
+    width: 22px;
+    font-size: 10px;
+  }
+  #swView:not(.portrait) .lap-total {
+    font-size: 12px;
+  }
+  #swView:not(.portrait) .lap-delta {
+    font-size: 11px;
   }
   /* 计次悬浮按钮：右下角，旗子图标 + 文案；大 padding 扩大点击热区，风格仍保持很淡 */
   #lapBtn {
