@@ -363,37 +363,53 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+  /* 计次记录：单行左右排列（序号 | 总时长 | 间隔），紧凑不占高 */
   .lap-row {
-    padding: 9px 14px;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: baseline;
+    align-items: baseline;
+    padding: 7px 14px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
   }
   .lap-idx {
+    -webkit-flex: none;
+    flex: none;
+    width: 30px;
     color: #fff;
     opacity: 0.3;
     font-size: 11px;
     letter-spacing: 0.05em;
   }
   .lap-total {
+    -webkit-flex: 1;
+    flex: 1;
     color: #fff;
     opacity: 0.85;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    margin-top: 2px;
+    white-space: nowrap;
   }
   .lap-delta {
+    -webkit-flex: none;
+    flex: none;
     color: #fff;
     opacity: 0.35;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    margin-top: 1px;
+    white-space: nowrap;
   }
-  /* 计次悬浮按钮：右下角，风格与左上角模式按钮一致（很淡，不抢视觉） */
+  /* 计次悬浮按钮：右下角，旗子图标 + 文案；大 padding 扩大点击热区，风格仍保持很淡 */
   #lapBtn {
     position: fixed;
-    right: 16px;
-    bottom: 20px;
+    right: 14px;
+    bottom: 16px;
     z-index: 30;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
     -webkit-appearance: none;
     appearance: none;
     background: rgba(255,255,255,0.06);
@@ -405,10 +421,17 @@
     font-size: 14px;
     font-weight: 500;
     letter-spacing: 0.08em;
-    padding: 10px 20px;
+    padding: 15px 26px;
     margin: 0;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+  }
+  #lapBtn svg {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    -webkit-flex: none;
+    flex: none;
   }
 </style>
 </head>
@@ -516,7 +539,7 @@
       <div id="swSideHead">计次</div>
       <div id="swLaps"></div>
     </div>
-    <button id="lapBtn" type="button">计次</button>
+    <button id="lapBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>计次</button>
   </div>
 
 <script>
@@ -555,7 +578,6 @@
   var swM = document.getElementById('swM');
   var swS = document.getElementById('swS');
   var swState = document.getElementById('swState');
-  var swSideHead = document.getElementById('swSideHead');
   var swLaps = document.getElementById('swLaps');
   var lapBtn = document.getElementById('lapBtn');
 
@@ -856,7 +878,7 @@
      时间戳走时（Date.now 差值，零漂移）；计次列表只在点击时写一次 DOM；
      侧边栏展开用 transform 动画，待机时零渲染开销 */
   var SW_MAX_LAPS = 300;
-  var sw = { running: false, startAt: 0, elapsed: 0, laps: [] };
+  var sw = { running: false, started: false, startAt: 0, elapsed: 0, laps: [] };
 
   function swNow() {
     return sw.running ? (Date.now() - sw.startAt) : sw.elapsed;
@@ -870,9 +892,9 @@
     setCard(swH, (hh < 10 ? '0' : '') + hh, animate);
     setCard(swM, (mm < 10 ? '0' : '') + mm, animate);
     setCard(swS, (ss < 10 ? '0' : '') + ss, animate);
-    /* 走时中只显示「正计时」；未开始不提示，暂停后才追加提示 */
+    /* 走时中只显示「正计时」；只要启动过（含重置后停走）就提示已暂停 */
     var st = '正计时';
-    if (!sw.running && sw.elapsed > 0) { st = '正计时 · 已暂停'; }
+    if (!sw.running && sw.started) { st = '正计时 · 已暂停'; }
     if (swState.textContent !== st) { swState.textContent = st; }
   }
 
@@ -881,23 +903,17 @@
     swRender(animate !== false);
   }
 
-  /* 计次记录格式：总时长 + 与上一次点击的间隔（首次间隔记 0） */
+  /* 计次记录格式（统一中文）：总时长 + 与上一次点击的间隔（首次间隔记 0） */
   function fmtDur(ms) {
     var s = Math.floor(ms / 1000);
     var h = Math.floor(s / 3600);
     var m = Math.floor((s % 3600) / 60);
     var ss = s % 60;
     var out = [];
-    if (h > 0) { out.push(h + ' h'); }
-    if (h > 0 || m > 0) { out.push(m + ' min'); }
+    if (h > 0) { out.push(h + ' 时'); }
+    if (h > 0 || m > 0) { out.push(m + ' 分'); }
     out.push(ss + ' 秒');
     return out.join(' ');
-  }
-
-  function updateLapHead() {
-    var t = '计次';
-    if (sw.laps.length > 0) { t += ' · ' + sw.laps.length + '/' + SW_MAX_LAPS; }
-    if (swSideHead.textContent !== t) { swSideHead.textContent = t; }
   }
 
   function pushLap() {
@@ -910,11 +926,10 @@
     /* 新记录插到最上面，最新的计次永远第一眼可见；每次点击只写一次 DOM */
     swLaps.insertAdjacentHTML('afterbegin',
       '<div class="lap-row">' +
-        '<div class="lap-idx">#' + n + '</div>' +
-        '<div class="lap-total">' + fmtDur(t) + '</div>' +
-        '<div class="lap-delta">间隔 ' + fmtDur(t - prev) + '</div>' +
+        '<span class="lap-idx">#' + n + '</span>' +
+        '<span class="lap-total">' + fmtDur(t) + '</span>' +
+        '<span class="lap-delta">+' + fmtDur(t - prev) + '</span>' +
       '</div>');
-    updateLapHead();
     if (sw.laps.length >= SW_MAX_LAPS) { lapBtn.style.opacity = '0.2'; }   /* 达上限后按钮变淡示意 */
   }
 
@@ -930,6 +945,7 @@
       } else {
         sw.startAt = Date.now() - sw.elapsed;
         sw.running = true;
+        sw.started = true;
       }
       swRender(true);
     },
@@ -940,8 +956,7 @@
       swLaps.innerHTML = '';
       swView.classList.remove('side');
       lapBtn.style.opacity = '';
-      updateLapHead();
-      swRender(false);
+      swRender(false);   /* started 保持 true：重置后标题显示「已暂停」 */
     }
   );
 
