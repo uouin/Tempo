@@ -1024,13 +1024,22 @@
      时间戳走时（Date.now 差值，零漂移）；计次列表只在点击时写一次 DOM；
      侧边栏展开用 transform 动画，待机时零渲染开销 */
   var SW_MAX_LAPS = 300;
-  var sw = { running: false, started: false, startAt: 0, elapsed: 0, laps: [] };
+  var SW_MAX_MS = 24 * 3600 * 1000;   /* 正计时上限：24 小时 */
+  var sw = { running: false, started: false, capped: false, startAt: 0, elapsed: 0, laps: [] };
 
   function swNow() {
-    return sw.running ? (Date.now() - sw.startAt) : sw.elapsed;
+    var ms = sw.running ? (Date.now() - sw.startAt) : sw.elapsed;
+    return ms > SW_MAX_MS ? SW_MAX_MS : ms;   /* 显示/计次永不超 24:00:00 */
   }
 
   function swRender(animate) {
+    /* 到达 24 小时上限：自动停表并锁定（恢复走时被 swStart 拦截，双击重置解锁）。
+       检查放在 swRender——每秒 swTick、切视图、暂停恢复都会经过这里，无遗漏入口 */
+    if (sw.running && swNow() >= SW_MAX_MS) {
+      sw.elapsed = SW_MAX_MS;
+      sw.running = false;
+      sw.capped = true;
+    }
     var totalSec = Math.floor(swNow() / 1000);
     var hh = Math.floor(totalSec / 3600);
     var mm = Math.floor((totalSec % 3600) / 60);
@@ -1040,7 +1049,8 @@
     setCard(swS, (ss < 10 ? '0' : '') + ss, animate);
     /* 走时中只显示「正计时」；只要启动过（含重置后停走）就提示已暂停 */
     var st = '正计时';
-    if (!sw.running && sw.started) { st = '正计时 · 已暂停'; }
+    if (sw.capped) { st = '正计时 · 已达上限'; }
+    else if (!sw.running && sw.started) { st = '正计时 · 已暂停'; }
     if (swState.textContent !== st) { swState.textContent = st; }
     /* 计次按钮：暂停中 / 达上限时禁用（每秒只做一次布尔比较，无 DOM 写入） */
     var lapOff = !sw.running || sw.laps.length >= SW_MAX_LAPS;
@@ -1055,6 +1065,7 @@
   }
 
   function swStart() {
+    if (sw.capped) { swRender(true); return; }   /* 已达 24 小时上限：不再续走 */
     sw.startAt = Date.now() - sw.elapsed;
     sw.running = true;
     sw.started = true;
@@ -1115,6 +1126,7 @@
     },
     function () {
       sw.running = false;
+      sw.capped = false;
       sw.elapsed = 0;
       sw.laps.length = 0;
       swLaps.innerHTML = '';
