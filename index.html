@@ -473,6 +473,23 @@
     opacity: 0.15;
     cursor: default;
   }
+  #lapBtn {
+    -webkit-transition: bottom 0.3s ease;
+    transition: bottom 0.3s ease;   /* 竖屏展开/收起底栏时按钮位置平滑移动 */
+  }
+  /* 小屏横屏（compact）：标题与左上按钮条垂直对齐，底部提示与计次按钮垂直对齐 */
+  #swView.compact #swState {
+    position: absolute;
+    top: 22px;
+    left: 0; right: 0;
+    margin-bottom: 0;
+  }
+  #swView.compact #swHint {
+    position: absolute;
+    bottom: 33px;
+    left: 0; right: 0;
+    margin-top: 0;
+  }
 </style>
 </head>
 <body data-page-node-id="PHVwJtksViCUClyicGFO7w">
@@ -698,20 +715,33 @@
     applyCard(swM, cW, cHh, bd * 0.75);
     applyCard(swS, cW, cHh, bd * 0.75);
 
-    /* 正计时侧边栏形态：竖屏=底部面板（计次按钮上移避开）；横屏按宽高比定宽度
-       （≥16:9 长条屏用 1/5 并缩放 0.8，普通横屏用 1/4 缩放 0.75） */
+    /* 正计时侧边栏形态：竖屏=底部面板；横屏按宽高比定宽度
+       （≥16:9 长条屏用 1/5 并缩放 0.8，普通横屏用 1/4 缩放 0.75）
+       小屏横屏追加 compact：标题/提示与按钮条、计次按钮对齐 */
     if (h >= w) {
       swView.classList.add('portrait');
       swView.classList.remove('wide');
-      lapBtn.style.bottom = Math.round(h * 0.35 + 14) + 'px';
     } else {
       swView.classList.remove('portrait');
-      lapBtn.style.bottom = '16px';
       if (w / h >= 1.7) {
         swView.classList.add('wide');
       } else {
         swView.classList.remove('wide');
       }
+    }
+    if (phoneLs) { swView.classList.add('compact'); } else { swView.classList.remove('compact'); }
+    positionLapBtn();
+  }
+
+  /* 计次悬浮按钮位置：竖屏展开底栏时上移到栏上方，其余情况贴右下角
+     （竖屏未展开时贴底，避免悬在卡片上） */
+  function positionLapBtn() {
+    var w = document.documentElement.clientWidth;
+    var h = document.documentElement.clientHeight;
+    if (h >= w && swView.classList.contains('side')) {
+      lapBtn.style.bottom = Math.round(h * 0.35 + 14) + 'px';
+    } else {
+      lapBtn.style.bottom = '16px';
     }
   }
 
@@ -989,6 +1019,7 @@
     var prev = sw.laps.length ? sw.laps[sw.laps.length - 1].t : 0;
     var n = sw.laps.push({ t: t, d: t - prev });
     swView.classList.add('side');   /* 首次计次即展开侧边栏（已展开则保持） */
+    positionLapBtn();
     /* 新记录插到最上面，最新的计次永远第一眼可见；每次点击只写一次 DOM */
     swLaps.insertAdjacentHTML('afterbegin',
       '<div class="lap-row">' +
@@ -1026,6 +1057,7 @@
       sw.laps.length = 0;
       swLaps.innerHTML = '';
       swView.classList.remove('side');
+      positionLapBtn();
       swRender(false);   /* started 保持 true：重置后标题显示「已暂停」；计次按钮随 swRender 转为禁用 */
     }
   );
