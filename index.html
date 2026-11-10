@@ -741,6 +741,7 @@
   var pMin = document.getElementById('pMin');
   var pSec = document.getElementById('pSec');
   var pomoState = document.getElementById('pomoState');
+  var pomoHint = document.getElementById('pomoHint');
 
   /* 倒计时视图元素 + 左上角按钮条 */
   var cdView = document.getElementById('cdView');
@@ -952,6 +953,10 @@
     /* 走时中只显示段名保持简洁；暂停时追加「已暂停」提示，防止误以为没在走 */
     var st = (pomo.mode === 'focus' ? '专注' : '休息') + (pomo.running ? '' : ' · 已暂停');
     if (pomoState.textContent !== st) { pomoState.textContent = st; }   /* 没变就不写 DOM */
+    /* 提示文案随运行状态切换：走时中提示「暂停」，停止时提示「开始」 */
+    var hint = pomo.running ? '单击卡片· 暂停，双击卡片· 重置'
+                            : '单击卡片· 开始，双击卡片· 重置';
+    if (pomoHint.textContent !== hint) { pomoHint.textContent = hint; }
   }
 
   function pomoTick(animate) {

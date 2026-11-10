@@ -6,10 +6,10 @@
 
 **时间翻页而过，专注留在当下。**
 
-翻页时钟 · 番茄钟 · 倒计时 —— 一块挂在屏幕里的苹果翻页钟。
+翻页时钟 · 番茄钟 · 倒计时 · 正计时 —— 一块挂在屏幕里的苹果翻页钟。
 
 [![在线体验](https://img.shields.io/badge/🌐_立即打开-uouin.github.io%2FTempo-1e1e22?style=for-the-badge&labelColor=000000)](https://uouin.github.io/Tempo/)
-[![零依赖](https://img.shields.io/badge/安装_—_不需要-✓-brightgreen?style=for-the-badge&labelColor=000000)](#-三种模式一键切换)
+[![零依赖](https://img.shields.io/badge/安装_—_不需要-✓-brightgreen?style=for-the-badge&labelColor=000000)](#-四种模式一键切换)
 [![单文件](https://img.shields.io/badge/体积_—_25KB-轻如鸿毛-blue?style=for-the-badge&labelColor=000000)](#)
 [![老设备](https://img.shields.io/badge/十年前的_iPad_—_也能跑-orange?style=for-the-badge&labelColor=000000)](#-为老设备而生)
 
@@ -29,9 +29,9 @@
 
 ---
 
-## ✨ 三种模式，一键切换
+## ✨ 四种模式，一键切换
 
-左上角有三个**刻意做得很淡**的小按钮：`番茄钟 · 一小时 · 两小时`。
+左上角有四个**刻意做得很淡**的小按钮：`番茄钟 · 一小时 · 两小时 · 正计时`。
 点哪个进哪个；正在用的那个会微微亮起、变成「时钟」—— 点它随时回家。
 
 ### 🕐 翻页时钟
@@ -68,6 +68,12 @@
 - 中途熄屏、切去干别的，回来进度分秒不差
 - 暂停时，标题会轻轻亮出「**已暂停**」三个字；一旦继续，它就悄悄退场，不打扰专注
 
+<div align="center">
+
+<img src="assets/pomodoro.png" alt="番茄钟" width="72%">
+
+</div>
+
 ### ⏳ 一小时 / 两小时倒计时
 
 给「再干一小时的活」一个庄严的倒计时：
@@ -77,6 +83,27 @@
 <div align="center">
 
 <img src="assets/countdown.png" alt="倒计时" width="72%">
+
+</div>
+
+### ⏱ 正计时 + 计次
+
+需要一个不给压力、只管往前走的钟？切到**正计时**：
+
+- 进入就走表，**双击重置**，轻点暂停 / 继续 —— 和其他模式同样的手感
+- 右下角一枚不起眼的**计次**按钮：每点一次，记下当前时刻与距上次的间隔
+- 第一次计次，**侧边栏轻轻滑入**；时间线最新在上，一目了然，最多可记 300 次
+- 竖屏时侧边栏从**底部升起**，横屏时从**右侧展开**，卡片自动让位 —— 怎么转都从容
+
+<div align="center">
+
+<table><tr>
+<td><img src="assets/stopwatch-laps.png" width="100%"></td>
+<td><img src="assets/stopwatch-phone-portrait.png" width="100%"></td>
+</tr><tr>
+<td align="center"><sub>横屏 · 右侧计次时间线</sub></td>
+<td align="center"><sub>竖屏 · 底部计次栏</sub></td>
+</tr></table>
 
 </div>
 
@@ -116,7 +143,7 @@
 
 </div>
 
-旋转屏幕即时重排，横竖都好看。
+旋转屏幕即时重排，横竖都好看 —— 手机、iPad、电脑浏览器，每一块屏都单独调过版式。
 
 ---
 
