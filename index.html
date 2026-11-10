@@ -477,11 +477,17 @@
     -webkit-transition: bottom 0.3s ease;
     transition: bottom 0.3s ease;   /* 竖屏展开/收起底栏时按钮位置平滑移动 */
   }
-  /* 小屏横屏（compact）：标题与左上按钮条垂直对齐，底部提示与计次按钮垂直对齐 */
+  /* 小屏横屏（compact）：标题移到右上角与按钮条同高（居中会与按钮重叠），
+     底部提示居中并与计次按钮垂直对齐；
+     卡片居中于标题栏与提示栏之间，上下留白避免与按钮/提示挤在一起 */
+  #swView.compact #swMain {
+    padding-top: 44px;
+    padding-bottom: 78px;
+  }
   #swView.compact #swState {
     position: absolute;
     top: 22px;
-    left: 0; right: 0;
+    right: 14px;
     margin-bottom: 0;
   }
   #swView.compact #swHint {
@@ -489,6 +495,7 @@
     bottom: 33px;
     left: 0; right: 0;
     margin-top: 0;
+    text-align: center;
   }
 </style>
 </head>
@@ -674,15 +681,19 @@
       - 手机横屏：屏幕又矮又宽，按宽度 94% 撑满
         时钟视图 3 张卡共 3.56b、番茄钟 2.48b、倒计时 3.76b
     */
-    var b, bp, bd;
+    var b, bp, bd, bsw;
     if (!phoneLs) {
       b = Math.min(h * 0.30, w * 0.24);
       bp = b;
       bd = Math.min(b, w / 4.0);
+      bsw = bd;
     } else {
       b = Math.min(w * 0.94 / 3.56, h * 0.86 / 1.4);
       bp = Math.min(w * 0.94 / 2.48, (h - LABEL) * 0.98 / 1.4);
       bd = Math.min(w * 0.94 / 3.76, (h - LABEL) * 0.98 / 1.4);
+      /* 手机横屏的正计时卡片额外缩小：标题/提示走绝对定位贴边，
+         中间只留卡片，上下各让出约 64px，不再顶满整屏 */
+      bsw = Math.min(w * 0.9 / 3.56, (h - 128) / 1.4);
     }
 
     /* 时钟视图 */
@@ -708,12 +719,14 @@
     applyCard(cM, cW, cHh, bd * 0.75);
     applyCard(cS, cW, cHh, bd * 0.75);
 
-    /* 正计时视图（与倒计时同尺寸；点计次后的缩放走 transform，不参与布局计算） */
-    swM.style.marginLeft = (bd * GAP) + 'px';
-    swS.style.marginLeft = (bd * GAP) + 'px';
-    applyCard(swH, cW, cHh, bd * 0.75);
-    applyCard(swM, cW, cHh, bd * 0.75);
-    applyCard(swS, cW, cHh, bd * 0.75);
+    /* 正计时视图（非手机横屏与倒计时同尺寸；手机横屏用缩小版 bsw；
+       点计次后的缩放走 transform，不参与布局计算） */
+    var swW = bsw * 1.2, swHh = bsw * 1.4;
+    swM.style.marginLeft = (bsw * GAP) + 'px';
+    swS.style.marginLeft = (bsw * GAP) + 'px';
+    applyCard(swH, swW, swHh, bsw * 0.75);
+    applyCard(swM, swW, swHh, bsw * 0.75);
+    applyCard(swS, swW, swHh, bsw * 0.75);
 
     /* 正计时侧边栏形态：竖屏=底部面板；横屏按宽高比定宽度
        （≥16:9 长条屏用 1/5 并缩放 0.8，普通横屏用 1/4 缩放 0.75）
