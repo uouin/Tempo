@@ -433,6 +433,17 @@
     -webkit-flex: none;
     flex: none;
   }
+  /* 点击态：按下时变亮（iOS 需页面存在 touchstart 监听才会渲染 :active，见 JS 末尾） */
+  #lapBtn:active {
+    background: rgba(255,255,255,0.16);
+    border-color: rgba(255,255,255,0.22);
+    opacity: 0.75;
+  }
+  /* 禁用态：暂停中 / 达 300 上限，明显变淡且不响应点击 */
+  #lapBtn:disabled {
+    opacity: 0.15;
+    cursor: default;
+  }
 </style>
 </head>
 <body data-page-node-id="PHVwJtksViCUClyicGFO7w">
@@ -896,11 +907,21 @@
     var st = '正计时';
     if (!sw.running && sw.started) { st = '正计时 · 已暂停'; }
     if (swState.textContent !== st) { swState.textContent = st; }
+    /* 计次按钮：暂停中 / 达上限时禁用（每秒只做一次布尔比较，无 DOM 写入） */
+    var lapOff = !sw.running || sw.laps.length >= SW_MAX_LAPS;
+    if (lapBtn.disabled !== lapOff) { lapBtn.disabled = lapOff; }
   }
 
   function swTick(animate) {
     if (!sw.running) { return; }
     swRender(animate !== false);
+  }
+
+  function swStart() {
+    sw.startAt = Date.now() - sw.elapsed;
+    sw.running = true;
+    sw.started = true;
+    swRender(true);
   }
 
   /* 计次记录格式（统一中文）：总时长 + 与上一次点击的间隔（首次间隔记 0） */
@@ -930,10 +951,17 @@
         '<span class="lap-total">' + fmtDur(t) + '</span>' +
         '<span class="lap-delta">+' + fmtDur(t - prev) + '</span>' +
       '</div>');
-    if (sw.laps.length >= SW_MAX_LAPS) { lapBtn.style.opacity = '0.2'; }   /* 达上限后按钮变淡示意 */
+    if (sw.laps.length >= SW_MAX_LAPS) { lapBtn.disabled = true; }   /* 达上限禁用 */
   }
 
-  lapBtn.addEventListener('click', pushLap);
+  /* 计次防抖：两次点击最少间隔 1 秒，误触双击只记一次 */
+  var lastLapAt = 0;
+  lapBtn.addEventListener('click', function () {
+    var now = Date.now();
+    if (now - lastLapAt < 1000) { return; }
+    lastLapAt = now;
+    pushLap();
+  });
 
   /* 正计时：轻点开始 / 暂停，双击重置（清计次 + 侧边栏收回 + 时分秒回全屏） */
   bindTapControls(
@@ -943,9 +971,7 @@
         sw.elapsed = Date.now() - sw.startAt;
         sw.running = false;
       } else {
-        sw.startAt = Date.now() - sw.elapsed;
-        sw.running = true;
-        sw.started = true;
+        swStart();
       }
       swRender(true);
     },
@@ -955,8 +981,7 @@
       sw.laps.length = 0;
       swLaps.innerHTML = '';
       swView.classList.remove('side');
-      lapBtn.style.opacity = '';
-      swRender(false);   /* started 保持 true：重置后标题显示「已暂停」 */
+      swRender(false);   /* started 保持 true：重置后标题显示「已暂停」；计次按钮随 swRender 转为禁用 */
     }
   );
 
@@ -986,7 +1011,11 @@
 
     if (v === 'pomo') { pomoRender(true); }
     if (v === 'countdown') { cdRender(true); }
-    if (swOn) { swRender(true); }
+    if (swOn) {
+      /* 进入正计时即直接开始计时（从上次进度续走，暂停/重置状态进入时也会走起来） */
+      if (!sw.running) { swStart(); }
+      else { swRender(true); }
+    }
   }
 
   pomoBtn.addEventListener('click', function () {
@@ -1171,6 +1200,9 @@
     if (swLaps && swLaps.contains(e.target)) { return; }
     e.preventDefault();
   }, { passive: false });
+
+  /* iOS Safari 只有页面存在 touchstart 监听时才会渲染 :active 点击态（空实现即可） */
+  document.addEventListener('touchstart', function () {}, { passive: true });
 })();
 </script>
 </body>
