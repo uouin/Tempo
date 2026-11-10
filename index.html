@@ -110,6 +110,9 @@
     -webkit-justify-content: center;
     justify-content: center;
     line-height: 1;
+    /* letter-spacing 会在最后一个数字后面也附加负间距，导致居中盒右缘收缩、
+       字形整体右偏约半个字距；margin-left 反向补偿半个字距，让墨迹真正居中 */
+    margin-left: -0.01em;
   }
   .half.upper span, .flap.front span { top: 0; }     /* 显示字形上半 */
   .half.lower span, .flap.back span  { top: -100%; } /* 上移一整卡，显示字形下半 */
