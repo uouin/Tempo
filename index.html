@@ -632,6 +632,15 @@
     text-align: center;
   }
 </style>
+<script>
+var _hmt = _hmt || [];
+(function() {
+var hm = document.createElement("script");
+hm.src = "https://hm.baidu.com/hm.js?7c550a2d542170e1d717da962774f0d7";
+var s = document.getElementsByTagName("script")[0];
+s.parentNode.insertBefore(hm, s);
+})();
+</script>
 </head>
 <body data-page-node-id="PHVwJtksViCUClyicGFO7w">
   <div id="modeBar">
@@ -1010,7 +1019,11 @@
         只执行重置；窗口内没有第二击 → 才真正执行开始/暂停
         （暂停时剩余时间按当下时刻结算，一秒不丢）；
      c) 三击 = 单击 + 双击，行为可预期（例如：暂停后紧跟重置）。 */
-  function bindTapControls(el, onSingle, onDouble) {
+  function trackEvent(category, action, label) {
+    try { (window._hmt = window._hmt || []).push(['_trackEvent', category, action, label]); } catch (e) {}
+  }
+
+  function bindTapControls(el, onSingle, onDouble, tag) {
     var pendingTimer = null;   /* 双击判定窗口内挂起的单击动作 */
     var lastTouchEnd = 0;      /* 触摸时刻，用于丢弃 iOS 衍生的 ghost click */
 
@@ -1019,10 +1032,12 @@
         /* 第二击落在窗口内：确认是双击，取消待执行的单击 */
         clearTimeout(pendingTimer);
         pendingTimer = null;
+        trackEvent('卡片', '双击', tag);
         onDouble();
       } else {
         pendingTimer = setTimeout(function () {
           pendingTimer = null;
+          trackEvent('卡片', '轻点', tag);
           onSingle();
         }, 300);
       }
@@ -1053,7 +1068,8 @@
       }
       pomoRender(true);
     },
-    pomoReset
+    pomoReset,
+    '番茄钟'
   );
 
   /* ---------- 一小时 / 两小时倒计时（到 0 停住，不循环） ---------- */
@@ -1114,7 +1130,8 @@
       cd.running = false;
       cd.remain = cd.total;
       cdRender(true);
-    }
+    },
+    '倒计时'
   );
 
   /* ---------- 正计时（秒表）+ 计次 ----------
@@ -1291,6 +1308,7 @@
 
   lapBtn.addEventListener('click', function () {
     if (lapSuppressClick) { lapSuppressClick = false; return; }
+    trackEvent('功能按钮', '点击', '计次');
     var now = Date.now();
     if (now - lastLapAt < 1000) { return; }
     lastLapAt = now;
@@ -1317,7 +1335,8 @@
       swLaps.innerHTML = '';
       swView.classList.remove('side');
       swRender(false);   /* started 保持 true：重置后标题显示「已暂停」；计次按钮随 swRender 转为禁用 */
-    }
+    },
+    '正计时'
   );
 
   /* ---------- 视图切换（时钟 / 番茄钟 / 倒计时 / 正计时），互不干扰 ----------
@@ -1354,19 +1373,23 @@
   }
 
   pomoBtn.addEventListener('click', function () {
+    trackEvent('功能按钮', '点击', '番茄钟');
     showView(currentView === 'pomo' ? 'clock' : 'pomo');
   });
   h1Btn.addEventListener('click', function () {
+    trackEvent('功能按钮', '点击', '一小时');
     if (currentView === 'countdown' && cd.total === H1) { showView('clock'); return; }
     cdStart(H1);
     showView('countdown');
   });
   h2Btn.addEventListener('click', function () {
+    trackEvent('功能按钮', '点击', '两小时');
     if (currentView === 'countdown' && cd.total === H2) { showView('clock'); return; }
     cdStart(H2);
     showView('countdown');
   });
   swBtn.addEventListener('click', function () {
+    trackEvent('功能按钮', '点击', '正计时');
     showView(currentView === 'stopwatch' ? 'clock' : 'stopwatch');
   });
 
