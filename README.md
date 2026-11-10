@@ -34,6 +34,12 @@
 左上角有四个**刻意做得很淡**的小按钮：`番茄钟 · 一小时 · 两小时 · 正计时`。
 点哪个进哪个；正在用的那个会微微亮起、变成「时钟」—— 点它随时回家。
 
+<div align="center">
+
+<img src="assets/mode-switch.gif" alt="四种模式一键切换" width="72%">
+
+</div>
+
 ### 🕐 翻页时钟
 
 时、分、秒各一张卡，秒卡乖巧地待在右下角。
@@ -98,11 +104,11 @@
 <div align="center">
 
 <table><tr>
-<td><img src="assets/stopwatch-laps.png" width="100%"></td>
-<td><img src="assets/stopwatch-phone-portrait.png" width="100%"></td>
+<td><img src="assets/stopwatch-laps.gif" width="100%"></td>
+<td><img src="assets/stopwatch-portrait.gif" width="100%"></td>
 </tr><tr>
-<td align="center"><sub>横屏 · 右侧计次时间线</sub></td>
-<td align="center"><sub>竖屏 · 底部计次栏</sub></td>
+<td align="center"><sub>横屏 · 计次侧边栏轻轻滑入，最新在上</sub></td>
+<td align="center"><sub>竖屏 · 计次栏从底部升起</sub></td>
 </tr></table>
 
 </div>
