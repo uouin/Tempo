@@ -305,16 +305,21 @@
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     overflow: hidden;
-  }
-  #swMain {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
     display: -webkit-flex;
     display: flex;
     -webkit-flex-direction: column;
     flex-direction: column;
     -webkit-align-items: center;
     align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+  }
+  /* swMain 只包卡片；标题/提示是 swView 的直接子节点（不在缩放容器内），
+     侧栏展开的 scale 只缩卡片，标题/提示位置恒定 */
+  #swMain {
+    width: 100%;
+    display: -webkit-flex;
+    display: flex;
     -webkit-justify-content: center;
     justify-content: center;
     -webkit-transform-origin: left center;
@@ -375,6 +380,15 @@
   #swView.portrait.side #swSide {
     -webkit-transform: translateY(0);
     transform: translateY(0);
+  }
+  /* 竖屏展开底栏时提示小字让位：底栏上方是计次按钮活动区，
+     且提示会被底栏盖住，淡出避免重叠（纯 opacity，无重排） */
+  #swHint {
+    -webkit-transition: opacity 0.3s ease;
+    transition: opacity 0.3s ease;
+  }
+  #swView.portrait.side #swHint {
+    opacity: 0;
   }
   #swSideHead {
     -webkit-flex: none;
@@ -480,7 +494,7 @@
   /* 小屏横屏（compact）：标题移到右上角与按钮条同高（居中会与按钮重叠），
      底部提示居中并与计次按钮垂直对齐；
      卡片居中于标题栏与提示栏之间，上下留白避免与按钮/提示挤在一起 */
-  #swView.compact #swMain {
+  #swView.compact {
     padding-top: 44px;
     padding-bottom: 78px;
   }
@@ -490,7 +504,31 @@
     right: 14px;
     margin-bottom: 0;
   }
+  /* 侧栏展开后主区域右缘 = 侧栏左缘：标题贴到其左侧 14px（高度不变，仍与按钮条同高），
+     不会盖到侧栏上，也不会被 scale 推得忽高忽低 */
+  #swView.compact.side #swState {
+    right: calc(25% + 14px);
+  }
+  #swView.compact.wide.side #swState {
+    right: calc(20% + 14px);
+  }
   #swView.compact #swHint {
+    position: absolute;
+    bottom: 33px;
+    left: 0; right: 0;
+    margin-top: 0;
+    text-align: center;
+  }
+  /* 番茄钟 / 倒计时在小屏横屏下同样处理：标题右上角与按钮条同高，提示贴底居中 */
+  #pomoView.compact #pomoState,
+  #cdView.compact #cdState {
+    position: absolute;
+    top: 22px;
+    right: 14px;
+    margin-bottom: 0;
+  }
+  #pomoView.compact #pomoHint,
+  #cdView.compact #cdHint {
     position: absolute;
     bottom: 33px;
     left: 0; right: 0;
@@ -545,7 +583,7 @@
         <div class="flap back"><span></span></div>
       </div>
     </div>
-    <div id="pomoHint">轻点开始 / 暂停 · 双击重置</div>
+    <div id="pomoHint">单击卡片· 开始/暂停，双击卡片· 重置</div>
   </div>
 
   <div id="cdView" style="display:none">
@@ -570,13 +608,15 @@
         <div class="flap back"><span></span></div>
       </div>
     </div>
-    <div id="cdHint">轻点开始 / 暂停 · 双击重置</div>
+    <div id="cdHint">单击卡片· 开始/暂停，双击卡片· 重置</div>
   </div>
 
-  <!-- 正计时视图：左侧时分秒（点计次后缩放至 3/4），右侧 1/4 计次侧边栏，右下角悬浮计次按钮 -->
+  <!-- 正计时视图：左侧时分秒（点计次后缩放至 3/4），右侧 1/4 计次侧边栏，右下角悬浮计次按钮
+       标题/提示是 swView 直接子节点、在 swMain（缩放容器）之外：
+       侧栏展开的 scale 不会带动它们，compact 下才能始终与按钮条/计次按钮对齐 -->
   <div id="swView" style="display:none">
+    <div id="swState">正计时</div>
     <div id="swMain">
-      <div id="swState">正计时</div>
       <div class="clock" id="swCards">
         <div class="card" id="swH">
           <div class="half upper"><span>00</span></div>
@@ -597,8 +637,8 @@
           <div class="flap back"><span></span></div>
         </div>
       </div>
-      <div id="swHint">轻点开始 / 暂停 · 双击重置</div>
     </div>
+    <div id="swHint">单击卡片· 开始/暂停，双击卡片· 重置</div>
     <div id="swSide">
       <div id="swSideHead">计次</div>
       <div id="swLaps"></div>
@@ -672,7 +712,6 @@
     var w = document.documentElement.clientWidth;
     var h = document.documentElement.clientHeight;
     var GAP = 0.08;                  /* 卡间距 = 0.08 × 基准 */
-    var LABEL = 26 + 16 + 26 + 13;   /* 番茄钟/倒计时视图的标签与提示占位 */
     var phoneLs = h < 500 && w > h;  /* 手机横屏 */
 
     /*
@@ -688,12 +727,12 @@
       bd = Math.min(b, w / 4.0);
       bsw = bd;
     } else {
-      b = Math.min(w * 0.94 / 3.56, h * 0.86 / 1.4);
-      bp = Math.min(w * 0.94 / 2.48, (h - LABEL) * 0.98 / 1.4);
-      bd = Math.min(w * 0.94 / 3.76, (h - LABEL) * 0.98 / 1.4);
-      /* 手机横屏的正计时卡片额外缩小：标题/提示走绝对定位贴边，
-         中间只留卡片，上下各让出约 64px，不再顶满整屏 */
-      bsw = Math.min(w * 0.9 / 3.56, (h - 128) / 1.4);
+      /* 手机横屏：卡片统一缩小，上下留白——顶部让开左上角按钮条（约 44px 高），
+         底部留呼吸空间，不再顶满整屏显得局促 */
+      b = Math.min(w * 0.94 / 3.56, (h - 110) / 1.4);    /* 时钟：无标题/提示，上下各留 55px */
+      bp = Math.min(w * 0.94 / 2.48, (h - 132) / 1.4);   /* 番茄钟：标题/提示 compact 下走绝对定位 */
+      bd = Math.min(w * 0.94 / 3.76, (h - 132) / 1.4);   /* 倒计时：同上 */
+      bsw = Math.min(w * 0.9 / 3.56, (h - 128) / 1.4);   /* 正计时 */
     }
 
     /* 时钟视图 */
@@ -742,7 +781,15 @@
         swView.classList.remove('wide');
       }
     }
-    if (phoneLs) { swView.classList.add('compact'); } else { swView.classList.remove('compact'); }
+    if (phoneLs) {
+      swView.classList.add('compact');
+      pomoView.classList.add('compact');
+      cdView.classList.add('compact');
+    } else {
+      swView.classList.remove('compact');
+      pomoView.classList.remove('compact');
+      cdView.classList.remove('compact');
+    }
     positionLapBtn();
   }
 
@@ -1086,7 +1133,7 @@
     clockView.style.display = v === 'clock' ? 'flex' : 'none';
     pomoView.style.display = v === 'pomo' ? 'flex' : 'none';
     cdView.style.display = v === 'countdown' ? 'flex' : 'none';
-    swView.style.display = v === 'stopwatch' ? 'block' : 'none';
+    swView.style.display = v === 'stopwatch' ? 'flex' : 'none';
 
     var cdOn1 = v === 'countdown' && cd.total === H1;
     var cdOn2 = v === 'countdown' && cd.total === H2;
